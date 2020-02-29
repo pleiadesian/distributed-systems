@@ -19,13 +19,13 @@
 #include "rdt_receiver.h"
 
 #define MAX_MESSAGE_SIZE    10000
-#define CHECKSUM_OFFSET 0
-#define CHECKSUM_SIZE   sizeof(short)
-#define INFO_OFFSET     CHECKSUM_OFFSET + CHECKSUM_SIZE
-#define INFO_SIZE       1
-#define SEQNUM_OFFSET   INFO_OFFSET + INFO_SIZE
-#define SEQNUM_SIZE     sizeof(int)
-#define PAYLOAD_OFFSET  SEQNUM_OFFSET + SEQNUM_SIZE
+#define CHECKSUM_OFFSET     0
+#define CHECKSUM_SIZE       2
+#define INFO_OFFSET         CHECKSUM_OFFSET + CHECKSUM_SIZE
+#define INFO_SIZE           1
+#define SEQNUM_OFFSET       INFO_OFFSET + INFO_SIZE
+#define SEQNUM_SIZE         4
+#define PAYLOAD_OFFSET      SEQNUM_OFFSET + SEQNUM_SIZE
 
 #define CHECKSUM(data)          (*(short *)&data[CHECKSUM_OFFSET])
 #define END_OF_MESSAGE(data)    ((data[INFO_OFFSET] & 0X80) >> 7)
@@ -40,6 +40,7 @@ static short checksum(packet *pkt)
 {
     unsigned short *buf = (unsigned short *)pkt->data;
     unsigned long sum = 0;
+    buf++;  /* skip checksum part */
     for (int i = 2; i < RDT_PKTSIZE; i += sizeof(unsigned short)) 
         sum += *buf++;
     while (sum >> 16) 
@@ -65,6 +66,16 @@ void Receiver_Final()
     free(curr_msg_data);
 }
 
+void Receiver_SendAck(int ack_no)
+{
+    struct packet *ack_pkt = (struct packet *)malloc(sizeof(struct packet));
+    memset(ack_pkt->data, '\0', RDT_PKTSIZE);
+    memcpy(ack_pkt->data + SEQNUM_OFFSET, &ack_no, SEQNUM_SIZE);
+    short ack_chksum = checksum(ack_pkt);
+    memcpy(ack_pkt->data + CHECKSUM_OFFSET, &ack_chksum, CHECKSUM_SIZE);
+    Receiver_ToLowerLayer(ack_pkt);
+}
+
 /* event handler, called when a packet is passed from the lower layer at the 
    receiver */
 void Receiver_FromLowerLayer(struct packet *pkt)
@@ -76,35 +87,37 @@ void Receiver_FromLowerLayer(struct packet *pkt)
         return;
     
     /* if sequence number is not expected, discard it */
-    if (SEQ_NO(pkt->data) != seq_expected) 
+    if (SEQ_NO(pkt->data) > seq_expected) 
         return;
-    
-    /* concatenate the new data into current constructing message */
-    ASSERT(PAYLOAD_SIZE(pkt->data) > 0 && PAYLOAD_SIZE(pkt->data) <= RDT_PKTSIZE - SEQNUM_SIZE - INFO_SIZE - CHECKSUM_SIZE);
-    memcpy(curr_msg_data + curr_msg_size, pkt->data + PAYLOAD_OFFSET, PAYLOAD_SIZE(pkt->data));
-    curr_msg_size += PAYLOAD_SIZE(pkt->data);
+    else if (SEQ_NO(pkt->data) == seq_expected) {
+        /* concatenate the new data into current constructing message */
+        ASSERT(PAYLOAD_SIZE(pkt->data) > 0 && PAYLOAD_SIZE(pkt->data) <= RDT_PKTSIZE - SEQNUM_SIZE - INFO_SIZE - CHECKSUM_SIZE);
+        memcpy(curr_msg_data + curr_msg_size, pkt->data + PAYLOAD_OFFSET, PAYLOAD_SIZE(pkt->data));
+        curr_msg_size += PAYLOAD_SIZE(pkt->data);
+        ASSERT(curr_msg_size < MAX_MESSAGE_SIZE);
 
-    /* finish constructing a message, send it to upper layer */
-    if (END_OF_MESSAGE(pkt->data)) {
-        struct message *msg = (struct message*)malloc(sizeof(struct message));
-        ASSERT(msg != NULL);
-        msg->data = (char *)malloc(curr_msg_size);
-        ASSERT(msg->data != NULL);
-        msg->size = curr_msg_size;
-        memcpy(msg->data, curr_msg_data, curr_msg_size);
-        Receiver_ToUpperLayer(msg);
-        if (msg->data != NULL) 
-            free(msg->data);
-        if (msg != NULL) 
-            free(msg);
-        curr_msg_size = 0;
-        memset(curr_msg_data, '\0', curr_msg_size);
+        /* finish constructing a message, send it to upper layer */
+        if (END_OF_MESSAGE(pkt->data)) {
+            struct message *msg = (struct message*)malloc(sizeof(struct message));
+            ASSERT(msg != NULL);
+            msg->data = (char *)malloc(curr_msg_size);
+            ASSERT(msg->data != NULL);
+            msg->size = curr_msg_size;
+            memcpy(msg->data, curr_msg_data, curr_msg_size);
+            Receiver_ToUpperLayer(msg);
+            if (msg->data != NULL) 
+                free(msg->data);
+            if (msg != NULL) 
+                free(msg);
+            curr_msg_size = 0;
+            memset(curr_msg_data, '\0', curr_msg_size);
+        }
+
+        /* acknowledge the sender */
+        Receiver_SendAck(seq_expected);
+        seq_expected++;
+    } else {
+        /* receive an old packets, resend ack */
+        Receiver_SendAck(SEQ_NO(pkt->data));
     }
-
-    /* acknowledge the sender */
-    struct packet *ack_pkt = (struct packet *)malloc(sizeof(struct packet));
-    memset(ack_pkt->data, '\0', RDT_PKTSIZE);
-    memcpy(ack_pkt->data + SEQNUM_OFFSET, &seq_expected, SEQNUM_SIZE);
-    Receiver_ToLowerLayer(ack_pkt);
-    seq_expected++;
 }

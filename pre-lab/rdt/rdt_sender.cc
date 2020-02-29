@@ -21,17 +21,19 @@
 #define WINDOW_SIZE     10
 #define MSG_BUFFER_SIZE 15000
 #define CHECKSUM_OFFSET 0
-#define CHECKSUM_SIZE   sizeof(short)
+#define CHECKSUM_SIZE   2
 #define INFO_OFFSET     CHECKSUM_OFFSET + CHECKSUM_SIZE
 #define INFO_SIZE       1
 #define SEQNUM_OFFSET   INFO_OFFSET + INFO_SIZE
-#define SEQNUM_SIZE     sizeof(int)
+#define SEQNUM_SIZE     4
 #define PAYLOAD_OFFSET  SEQNUM_OFFSET + SEQNUM_SIZE
-#define PAYLOAD_SIZE    RDT_PKTSIZE - SEQNUM_SIZE - INFO_SIZE - CHECKSUM_SIZE
+#define PAYLOAD_SIZE    (unsigned int)(RDT_PKTSIZE - SEQNUM_SIZE - INFO_SIZE - CHECKSUM_SIZE)
 #define TIMEOUT         0.3
-#define CHECK_INTERVAL  0.1
+#define CHECK_INTERVAL  0.01
 
+#define CHECKSUM(data)  (*(short *)&data[CHECKSUM_OFFSET])
 #define END_OF_MESSAGE  0x80
+#define ACK_NO(data)    (*(int *)&data[SEQNUM_OFFSET])
 
 struct window {
     double send_time;
@@ -54,6 +56,7 @@ static short checksum(packet *pkt)
 {
     unsigned short *buf = (unsigned short *)pkt->data;
     unsigned long sum = 0;
+    buf++;  /* skip checksum part */
     for (int i = 2; i < RDT_PKTSIZE; i += sizeof(unsigned short)) 
         sum += *buf++;
     while (sum >> 16) 
@@ -90,36 +93,38 @@ void Sender_Final()
 /* fragmentation and move packets into window */
 static void Sender_ExpandWindow()
 {
+    /* no more message in buffer */
+    if (next_message_to_send == msg_no) 
+        return;
     ASSERT(next_message_to_send < msg_no);
     struct message *msg = &msg_buffer[next_message_to_send % MSG_BUFFER_SIZE];
     int packet_num = msg->size / PAYLOAD_SIZE;
     int last_packet_size = msg->size % PAYLOAD_SIZE;
     for (int i = message_cursor; i < packet_num; i++) {
+        /* stop moving packets into window when window is full*/
+        if (nbuffer >= WINDOW_SIZE) 
+            return;
         packet *p = &buffer[seq_no % WINDOW_SIZE].pkt;
         char header = ~END_OF_MESSAGE & PAYLOAD_SIZE;
         memcpy(p->data + INFO_OFFSET, &header, INFO_SIZE);
         memcpy(p->data + SEQNUM_OFFSET, &seq_no, SEQNUM_SIZE);
         memcpy(p->data + PAYLOAD_OFFSET, msg->data + PAYLOAD_SIZE * i, PAYLOAD_SIZE);
-        short chksum = checksum(p);
-        memcpy(p->data + CHECKSUM_OFFSET, &chksum, CHECKSUM_SIZE);
         seq_no++;
         nbuffer++;
         message_cursor++;
-        /* stop moving packets into window when window is full*/
-        if (nbuffer >= WINDOW_SIZE) 
-            return;
     }
 
     /* fill last packet */
     if (last_packet_size > 0) {
+        /* stop moving packets into window when window is full*/
+        if (nbuffer >= WINDOW_SIZE) 
+            return;
         ASSERT(last_packet_size < 128);
         packet *p = &buffer[seq_no % WINDOW_SIZE].pkt;
         char header = END_OF_MESSAGE | last_packet_size;
         memcpy(p->data + INFO_OFFSET, &header, INFO_SIZE);
         memcpy(p->data + SEQNUM_OFFSET, &seq_no, SEQNUM_SIZE);
         memcpy(p->data + PAYLOAD_OFFSET, msg->data + PAYLOAD_SIZE * packet_num, last_packet_size);
-        short chksum = checksum(p);
-        memcpy(p->data + CHECKSUM_OFFSET, &chksum, CHECKSUM_SIZE);
         seq_no++;
         nbuffer++;
     } else {
@@ -129,6 +134,7 @@ static void Sender_ExpandWindow()
         char header = END_OF_MESSAGE | PAYLOAD_SIZE;
         memcpy(p->data + INFO_OFFSET, &header, INFO_SIZE);
     }
+
     nmsg--;
     next_message_to_send++;
     message_cursor = 0;
@@ -139,7 +145,10 @@ static void Sender_SendPacket()
 {
     while (next_packet_to_send < seq_no) {
         buffer[next_packet_to_send % WINDOW_SIZE].send_time = GetSimulationTime();
-        Sender_ToLowerLayer(&buffer[next_packet_to_send % WINDOW_SIZE].pkt);
+        struct packet *p = &buffer[next_packet_to_send % WINDOW_SIZE].pkt;
+        short chksum = checksum(p);
+        memcpy(p->data + CHECKSUM_OFFSET, &chksum, CHECKSUM_SIZE);
+        Sender_ToLowerLayer(p);
         next_packet_to_send++;
     }
 }
@@ -153,24 +162,33 @@ void Sender_FromUpperLayer(struct message *msg)
     msg_buffer[msg_no % MSG_BUFFER_SIZE].size = msg->size;
     msg_buffer[msg_no % MSG_BUFFER_SIZE].data = (char *)malloc(msg->size);
     ASSERT(msg_buffer[msg_no % MSG_BUFFER_SIZE].data != NULL);
-    memcpy(&msg_buffer[msg_no % MSG_BUFFER_SIZE].data, msg->data, msg->size);
+    memcpy(msg_buffer[msg_no % MSG_BUFFER_SIZE].data, msg->data, msg->size);
     msg_no++;
     nmsg++;
 
     Sender_ExpandWindow();
     Sender_SendPacket();
 
-    if (!sending) 
+    if (!sending) {
+        sending = true;
         Sender_StartTimer(CHECK_INTERVAL);
+    }
 }
 
 /* event handler, called when a packet is passed from the lower layer at the 
    sender */
 void Sender_FromLowerLayer(struct packet *pkt)
 {
-    int ack_no;
-    memcpy(&ack_no, pkt->data + SEQNUM_OFFSET, SEQNUM_SIZE);
-    ASSERT(ack_no < seq_no);
+    /* if checksum does not match, discard it */
+    short chksum_expected = checksum(pkt);
+    short chksum = CHECKSUM(pkt->data);
+    if (chksum != chksum_expected) 
+        return;
+
+    int ack_no = ACK_NO(pkt->data);
+    /* if ack_no has corrupted, discard it*/
+    if (ack_no >= seq_no) 
+        return;
     /* ignore old acknowledge number and increase expected acknowledge number */
     if (ack_no >= ack_expected) {
         nbuffer -= ack_no - ack_expected + 1;
@@ -190,5 +208,11 @@ void Sender_Timeout()
         Sender_ExpandWindow();
         Sender_SendPacket();
     }
-    Sender_StartTimer(CHECK_INTERVAL);
+    /* stop checking when no message and packets are in buffer */
+    if (nmsg == 0 && nbuffer == 0) {
+        Sender_StopTimer();
+        sending = false;
+    } else { 
+        Sender_StartTimer(CHECK_INTERVAL);
+    }
 }
