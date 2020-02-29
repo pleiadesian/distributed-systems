@@ -1,11 +1,13 @@
 /*
  * FILE: rdt_sender.cc
  * DESCRIPTION: Reliable data transfer sender.
- * NOTE: In this implementation, the packet format is laid out as 
+  * NOTE: In this implementation, the packet format is laid out as 
  *       the following:
  *       
- *       |<-1 bit->|<-    7 bit   ->|<-  4 byte  ->|<-             the rest            ->|
- *       |<- EOM ->|<-payload size->|<-  seq no. ->|<-             payload             ->|
+ *                      |<-        1 byte        ->|
+ *                      |<-      packet info     ->|
+ *       |<-  2 byte  ->|<-1 bit->|<-    7 bit   ->|<-  4 byte  ->|<-       the rest      ->|
+ *       |<- checksum ->|<- EOM ->|<-payload size->|<-  seq no. ->|<-       payload       ->|
  */
 
 
@@ -18,12 +20,14 @@
 
 #define WINDOW_SIZE     10
 #define MSG_BUFFER_SIZE 15000
-#define INFO_OFFSET     0
+#define CHECKSUM_OFFSET 0
+#define CHECKSUM_SIZE   sizeof(short)
+#define INFO_OFFSET     CHECKSUM_OFFSET + CHECKSUM_SIZE
 #define INFO_SIZE       1
 #define SEQNUM_OFFSET   INFO_OFFSET + INFO_SIZE
 #define SEQNUM_SIZE     sizeof(int)
 #define PAYLOAD_OFFSET  SEQNUM_OFFSET + SEQNUM_SIZE
-#define PAYLOAD_SIZE    RDT_PKTSIZE - SEQNUM_SIZE - INFO_SIZE
+#define PAYLOAD_SIZE    RDT_PKTSIZE - SEQNUM_SIZE - INFO_SIZE - CHECKSUM_SIZE
 #define TIMEOUT         0.3
 #define CHECK_INTERVAL  0.1
 
@@ -46,6 +50,16 @@ static int msg_no = 0;                  // next message number to use
 static int nmsg = 0;                    // number of message buffers currently in use
 static bool sending = false;            // if sending has started
 
+short checksum(packet *pkt)
+{
+    unsigned short *buf = (unsigned short *)pkt->data;
+    unsigned long sum = 0;
+    for (int i = 2; i < RDT_PKTSIZE; i += sizeof(unsigned short)) 
+        sum += *buf++;
+    while (sum >> 16) 
+        sum = (sum >> 16) + (sum & 0xffff);
+    return ~sum;
+}
 
 /* sender initialization, called once at the very beginning */
 void Sender_Init()
@@ -86,6 +100,8 @@ void Sender_ExpandWindow()
         memcpy(p->data + INFO_OFFSET, &header, INFO_SIZE);
         memcpy(p->data + SEQNUM_OFFSET, &seq_no, SEQNUM_SIZE);
         memcpy(p->data + PAYLOAD_OFFSET, msg->data + PAYLOAD_SIZE * i, PAYLOAD_SIZE);
+        short chksum = checksum(p);
+        memcpy(p->data + CHECKSUM_OFFSET, &chksum, CHECKSUM_SIZE);
         seq_no++;
         nbuffer++;
         message_cursor++;
@@ -102,6 +118,8 @@ void Sender_ExpandWindow()
         memcpy(p->data + INFO_OFFSET, &header, INFO_SIZE);
         memcpy(p->data + SEQNUM_OFFSET, &seq_no, SEQNUM_SIZE);
         memcpy(p->data + PAYLOAD_OFFSET, msg->data + PAYLOAD_SIZE * packet_num, last_packet_size);
+        short chksum = checksum(p);
+        memcpy(p->data + CHECKSUM_OFFSET, &chksum, CHECKSUM_SIZE);
         seq_no++;
         nbuffer++;
     } else {

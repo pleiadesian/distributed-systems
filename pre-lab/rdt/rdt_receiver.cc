@@ -4,10 +4,10 @@
  * NOTE: In this implementation, the packet format is laid out as 
  *       the following:
  *       
- *       |<-        1 byte        ->|
- *       |<-      packet info     ->|
- *       |<-1 bit->|<-    7 bit   ->|<-    4 byte    ->|<-             the rest            ->|
- *       |<- EOM ->|<-payload size->|<-  seq/ack no. ->|<-             payload             ->|
+ *                      |<-        1 byte        ->|
+ *                      |<-      packet info     ->|
+ *       |<-  2 byte  ->|<-1 bit->|<-    7 bit   ->|<-  4 byte  ->|<-       the rest      ->|
+ *       |<- checksum ->|<- EOM ->|<-payload size->|<-  seq no. ->|<-       payload       ->|
  */
 
 
@@ -19,23 +19,33 @@
 #include "rdt_receiver.h"
 
 #define MAX_MESSAGE_SIZE    10000
-#define INFO_OFFSET         0
-#define INFO_SIZE           1
-#define SEQNUM_OFFSET       INFO_OFFSET + INFO_SIZE
-#define SEQNUM_SIZE         sizeof(int)
-#define PAYLOAD_OFFSET      SEQNUM_OFFSET + SEQNUM_SIZE
+#define CHECKSUM_OFFSET 0
+#define CHECKSUM_SIZE   sizeof(short)
+#define INFO_OFFSET     CHECKSUM_OFFSET + CHECKSUM_SIZE
+#define INFO_SIZE       1
+#define SEQNUM_OFFSET   INFO_OFFSET + INFO_SIZE
+#define SEQNUM_SIZE     sizeof(int)
+#define PAYLOAD_OFFSET  SEQNUM_OFFSET + SEQNUM_SIZE
 
+#define CHECKSUM(data)          (*(short *)&data[CHECKSUM_OFFSET])
 #define END_OF_MESSAGE(data)    ((data[INFO_OFFSET] & 0X80) >> 7)
-#define SEQ_NO(data)                                                           \
-  {                                                                            \
-    (data[SEQNUM_OFFSET] << 24 | data[SEQNUM_OFFSET + 1] << 16 |               \
-     data[SEQNUM_OFFSET + 2] << 8 | data[SEQNUM_OFFSET + 3])                   \
-  }
 #define PAYLOAD_SIZE(data)      (data[INFO_OFFSET] & 0X7F)
+#define SEQ_NO(data)            (*(int *)&data[SEQNUM_OFFSET])
 
 static char *curr_msg_data;             // current message to be constructed
 static int curr_msg_size = 0;           // current message size
 static int seq_expected = 0;            // next seq expected inbound
+
+short checksum(packet *pkt)
+{
+    unsigned short *buf = (unsigned short *)pkt->data;
+    unsigned long sum = 0;
+    for (int i = 2; i < RDT_PKTSIZE; i += sizeof(unsigned short)) 
+        sum += *buf++;
+    while (sum >> 16) 
+        sum = (sum >> 16) + (sum & 0xffff);
+    return ~sum;
+}
 
 /* receiver initialization, called once at the very beginning */
 void Receiver_Init()
@@ -59,13 +69,18 @@ void Receiver_Final()
    receiver */
 void Receiver_FromLowerLayer(struct packet *pkt)
 {
+    /* if checksum does not match, discard it */
+    short chksum_expected = checksum(pkt);
+    short chksum = CHECKSUM(pkt->data);
+    if (chksum != chksum_expected) 
+        return;
+    
     /* if sequence number is not expected, discard it */
-    int seq_no = SEQ_NO(pkt->data);
-    if (seq_no != seq_expected) 
+    if (SEQ_NO(pkt->data) != seq_expected) 
         return;
     
     /* concatenate the new data into current constructing message */
-    ASSERT(PAYLOAD_SIZE(pkt->data) > 0 && PAYLOAD_SIZE(pkt->data) <= RDT_PKTSIZE - SEQNUM_SIZE - INFO_SIZE);
+    ASSERT(PAYLOAD_SIZE(pkt->data) > 0 && PAYLOAD_SIZE(pkt->data) <= RDT_PKTSIZE - SEQNUM_SIZE - INFO_SIZE - CHECKSUM_SIZE);
     memcpy(curr_msg_data + curr_msg_size, pkt->data + PAYLOAD_OFFSET, PAYLOAD_SIZE(pkt->data));
     curr_msg_size += PAYLOAD_SIZE(pkt->data);
 
