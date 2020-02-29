@@ -50,7 +50,7 @@ static int msg_no = 0;                  // next message number to use
 static int nmsg = 0;                    // number of message buffers currently in use
 static bool sending = false;            // if sending has started
 
-short checksum(packet *pkt)
+static short checksum(packet *pkt)
 {
     unsigned short *buf = (unsigned short *)pkt->data;
     unsigned long sum = 0;
@@ -88,7 +88,7 @@ void Sender_Final()
 }
 
 /* fragmentation and move packets into window */
-void Sender_ExpandWindow()
+static void Sender_ExpandWindow()
 {
     ASSERT(next_message_to_send < msg_no);
     struct message *msg = &msg_buffer[next_message_to_send % MSG_BUFFER_SIZE];
@@ -131,10 +131,11 @@ void Sender_ExpandWindow()
     }
     nmsg--;
     next_message_to_send++;
+    message_cursor = 0;
 }
 
 /* send all packets */
-void Sender_SendPacket()
+static void Sender_SendPacket()
 {
     while (next_packet_to_send < seq_no) {
         buffer[next_packet_to_send % WINDOW_SIZE].send_time = GetSimulationTime();
@@ -152,7 +153,7 @@ void Sender_FromUpperLayer(struct message *msg)
     msg_buffer[msg_no % MSG_BUFFER_SIZE].size = msg->size;
     msg_buffer[msg_no % MSG_BUFFER_SIZE].data = (char *)malloc(msg->size);
     ASSERT(msg_buffer[msg_no % MSG_BUFFER_SIZE].data != NULL);
-    memcpy(&msg_buffer[msg_no].data, msg->data, msg->size);
+    memcpy(&msg_buffer[msg_no % MSG_BUFFER_SIZE].data, msg->data, msg->size);
     msg_no++;
     nmsg++;
 

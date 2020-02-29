@@ -36,7 +36,7 @@ static char *curr_msg_data;             // current message to be constructed
 static int curr_msg_size = 0;           // current message size
 static int seq_expected = 0;            // next seq expected inbound
 
-short checksum(packet *pkt)
+static short checksum(packet *pkt)
 {
     unsigned short *buf = (unsigned short *)pkt->data;
     unsigned long sum = 0;
@@ -104,6 +104,7 @@ void Receiver_FromLowerLayer(struct packet *pkt)
     /* acknowledge the sender */
     struct packet *ack_pkt = (struct packet *)malloc(sizeof(struct packet));
     memset(ack_pkt->data, '\0', RDT_PKTSIZE);
-    memcpy(ack_pkt->data + SEQNUM_OFFSET, &seq_no, SEQNUM_SIZE);
+    memcpy(ack_pkt->data + SEQNUM_OFFSET, &seq_expected, SEQNUM_SIZE);
     Receiver_ToLowerLayer(ack_pkt);
+    seq_expected++;
 }
