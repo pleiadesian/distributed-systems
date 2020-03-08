@@ -61,9 +61,9 @@ Q4: Describe the data structure of ‘rte_mbuf’.
 
 wireshark抓包结果如下图：
 
-##### ![wireshark](/Users/pro/sjtu/32/ds/lab-ds/lab2/wireshark.png)
+##### <img src="/Users/pro/sjtu/32/ds/lab-ds/lab2/wireshark.png" alt="wireshark" style="zoom: 25%;" />
 
 虚拟机运行DPDK程序输出如下图：
 
-![output](/Users/pro/sjtu/32/ds/lab-ds/lab2/output.png)
+<img src="/Users/pro/sjtu/32/ds/lab-ds/lab2/output.png" alt="output" style="zoom: 25%;" />
 
