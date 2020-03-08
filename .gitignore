@@ -1,3 +1,4 @@
 rdt_sim
 *.o
 .vscode/
+build/

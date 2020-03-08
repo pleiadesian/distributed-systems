@@ -33,6 +33,7 @@
 
 #include <stdint.h>
 #include <inttypes.h>
+#include <unistd.h>
 #include <rte_eal.h>
 #include <rte_ethdev.h>
 #include <rte_cycles.h>
@@ -40,7 +41,7 @@
 #include <rte_mbuf.h>
 #include <rte_ether.h>
 #include <rte_ip.h>
-#include <rte_UDP.h>
+#include <rte_udp.h>
 
 #define RX_RING_SIZE 128
 #define TX_RING_SIZE 512
@@ -52,13 +53,19 @@
 #define SEND_PORT 0
 #define RECV_PORT 0
 
+#define IPVERSION 4
 #define IP_DN_FRAGMENT_FLAG 0x0040
 #define IPDEFTTL 64
 
-#define BOND_IP_1   10
-#define BOND_IP_2   211
-#define BOND_IP_3   55
-#define BOND_IP_4   10
+#define SEND_IP_1   10
+#define SEND_IP_2   37
+#define SEND_IP_3   129
+#define SEND_IP_4   2
+
+#define RECV_IP_1   10
+#define RECV_IP_2   37
+#define RECV_IP_3   129
+#define RECV_IP_4   3
 
 static const struct rte_eth_conf port_conf_default = {
 	.rxmode = { .max_rx_pkt_len = ETHER_MAX_LEN }
@@ -73,17 +80,19 @@ construct_udp_pkt(struct rte_mbuf *pkt, const char *content, int content_len)
 {
     struct ether_hdr *ehdr;
     struct ipv4_hdr *ihdr;
-    struct UDP_hdr *uhdr;
+    struct udp_hdr *uhdr;
 	void *payload;
     struct ether_addr d_eaddr, s_eaddr;
-    uint32_t bond_ip =
-        BOND_IP_1 | (BOND_IP_2 << 8) | (BOND_IP_3 << 16) | (BOND_IP_4 << 24);
+    uint32_t send_ip =
+        SEND_IP_1 | (SEND_IP_2 << 8) | (SEND_IP_3 << 16) | (SEND_IP_4 << 24);
+    uint32_t recv_ip =
+        RECV_IP_1 | (RECV_IP_2 << 8) | (RECV_IP_3 << 16) | (RECV_IP_4 << 24);
 
     /* Initialize header pointers */
     ehdr = rte_pktmbuf_mtod(pkt, struct ether_hdr *);
     ihdr = rte_pktmbuf_mtod_offset(pkt, struct ipv4_hdr *,
                                    sizeof(struct ether_hdr));
-    uhdr = rte_pktmbuf_mtod_offset(pkt, struct UDP_hdr *,
+    uhdr = rte_pktmbuf_mtod_offset(pkt, struct udp_hdr *,
                                    sizeof(struct ether_hdr) +
                                        sizeof(struct ipv4_hdr));
 
@@ -92,30 +101,30 @@ construct_udp_pkt(struct rte_mbuf *pkt, const char *content, int content_len)
     rte_eth_macaddr_get(RECV_PORT, &s_eaddr);
     ehdr->d_addr = d_eaddr;
     ehdr->s_addr = s_eaddr;
-    ehdr->ether_type = rte_cpu_to_be_16(RTE_ETHER_TYPE_IPV4);
+    ehdr->ether_type = rte_cpu_to_be_16(ETHER_TYPE_IPv4);
 
-    ihdr->version_ihl = IPVERSION << 4 | sizeof(ihdr) / RTE_IPV4_IHL_MULTIPLIER;
+    ihdr->version_ihl = IPVERSION << 4 | sizeof(struct ipv4_hdr) / IPV4_IHL_MULTIPLIER;
 	ihdr->type_of_service = 0;
-	ihdr->total_length = rte_cpu_to_be_16(pkt->data_len);
+	ihdr->total_length = rte_cpu_to_be_16(pkt->data_len - sizeof(struct ether_hdr));
 	ihdr->packet_id = 0;
 	ihdr->fragment_offset = IP_DN_FRAGMENT_FLAG;
 	ihdr->time_to_live = IPDEFTTL;
 	ihdr->next_proto_id = IPPROTO_UDP;
 	ihdr->hdr_checksum = 0;
 	ihdr->hdr_checksum = rte_ipv4_cksum(ihdr);
-	ihdr->src_addr = bond_ip;
-	ihdr->dst_addr = bond_ip;
+	ihdr->src_addr = send_ip;
+	ihdr->dst_addr = recv_ip;
 
-	uhdr->src_port = 0;
-	uhdr->dst_port = 0;
-	uhdr->dgram_len = rte_cpu_to_be_16(pkt->data_len);
-	uhdr->dgram_cksum = 0;
+	uhdr->src_port = SEND_PORT;
+	uhdr->dst_port = RECV_PORT;
+	uhdr->dgram_len = rte_cpu_to_be_16(content_len + sizeof(struct udp_hdr));
+	uhdr->dgram_cksum = 0; 
 
 	/* Fill content */
 	payload = rte_pktmbuf_mtod_offset(pkt, void *,
 										sizeof(struct ether_hdr) +
 											sizeof(struct ipv4_hdr) +
-											sizeof(struct UDP_hdr));
+											sizeof(struct udp_hdr));
 	memcpy(payload, content, content_len);
 }
 
@@ -204,14 +213,14 @@ lcore_main(struct rte_mempool *mbuf_pool)
 			rte_lcore_id());
 
     /* Allocate a packet */
-    pkt = rte_pktmbuf_alloc(mbuf_pool);;
+    pkt = rte_pktmbuf_alloc(mbuf_pool);
     if (pkt == NULL) 
         rte_exit(EXIT_FAILURE, "Error with mbuf initialization\n");
 
     /* Reserve space for headers and content */
     if (rte_pktmbuf_prepend(
             pkt, sizeof(struct ether_hdr) + sizeof(struct ipv4_hdr) +
-                     sizeof(struct UDP_hdr) + sizeof(pkt_content)) == NULL)
+                     sizeof(struct udp_hdr) + sizeof(pkt_content)) == NULL)
         rte_exit(EXIT_FAILURE, "Error with mbuf prepending\n");
 
     /* construct UDP packet */
@@ -224,7 +233,7 @@ lcore_main(struct rte_mempool *mbuf_pool)
 	for (;;) {
 		/* Send burst of TX packets from port 0 */
 		const uint16_t nb_tx = rte_eth_tx_burst(SEND_PORT, 0, bufs, 1);
-		printf("Send a packet\n");
+		printf("Send %d packet\n", nb_tx);
 		sleep(1);
 	}
 }
@@ -250,8 +259,7 @@ main(int argc, char *argv[])
 
 	/* Check that there is an even number of ports to send/receive on. */
 	nb_ports = rte_eth_dev_count();
-	// if (nb_ports < 2 || (nb_ports & 1))
-	// 	rte_exit(EXIT_FAILURE, "Error: number of ports must be even\n");
+	printf("Get %d ports\n", nb_ports);
 
 	/* Creates a new mempool in memory to hold the mbufs. */
 	mbuf_pool = rte_pktmbuf_pool_create("MBUF_POOL", NUM_MBUFS * nb_ports,
@@ -270,7 +278,7 @@ main(int argc, char *argv[])
 		printf("\nWARNING: Too many lcores enabled. Only 1 used.\n");
 
 	/* Call lcore_main on the master core only. */
-	lcore_main();
+	lcore_main(mbuf_pool);
 
 	return 0;
 }
