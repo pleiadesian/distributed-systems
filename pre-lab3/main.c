@@ -23,11 +23,8 @@ main(int argc, char **argv)
     uint64_t time = 0;
     int cnt_send[APP_FLOWS_MAX];
     int cnt_pass[APP_FLOWS_MAX];
-    int cnt_color[APP_FLOWS_MAX][3];
     for (i = 0; i < APP_FLOWS_MAX; i++) {
         cnt_send[i] = cnt_pass[i] = 0;
-        for (j = 0; j < 3; j++) 
-            cnt_color[i][j] = 0;
     }
 
     for (i = 0; i < 10; i++) {
@@ -42,22 +39,19 @@ main(int argc, char **argv)
         
             /** get color */
             enum qos_color color = qos_meter_run(flow_id, pkt_len, time);
-
             
             /** make decision: weather drop */
             int pass = qos_dropper_run(flow_id, color, time);
 
             cnt_send[flow_id] += pkt_len;
             cnt_pass[flow_id] += pass ? 0 : pkt_len;
-            cnt_color[flow_id][color] += 1;
+
         }
         time += 1000000;
     }
 
     for (i = 0; i < APP_FLOWS_MAX; i++) {
-        printf("fid: %d, send: %d, pass: %d, green: %d, yellow: %d, red: %d\n", i,
-                cnt_send[i], cnt_pass[i], cnt_color[i][0], cnt_color[i][1],
-                cnt_color[i][2]);
+        printf("fid: %d, send: %d, pass: %d\n", i, cnt_send[i], cnt_pass[i]);
     }
 
     return 0;
