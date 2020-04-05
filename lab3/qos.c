@@ -1,5 +1,69 @@
 #include "qos.h"
+#include "stdint.h"
+#include "rte_common.h"
+#include "rte_mbuf.h"
+#include "rte_meter.h"
+#include "rte_red.h"
 
+// #define ANOTHER_WAY
+
+#ifndef ANOTHER_WAY
+struct rte_meter_srtcm_params app_srtcm_params[] = {
+    {.cir = 1000000000 * 0.16, .cbs = 2000000, .ebs = 2000000},
+    {.cir = 1000000000 * 0.08, .cbs = 760000, .ebs = 600000},
+    {.cir = 1000000000 * 0.04, .cbs = 360000, .ebs = 300000},
+    {.cir = 1000000000 * 0.02, .cbs = 160000, .ebs = 150000},
+};
+
+struct rte_red_params app_red_params[][e_RTE_METER_COLORS] = {
+    {
+        [e_RTE_METER_GREEN] = {.min_th = 1022, .max_th = 1023, .maxp_inv = 10, .wq_log2 = 9},
+        [e_RTE_METER_YELLOW] = {.min_th = 0, .max_th = 1, .maxp_inv = 10, .wq_log2 = 9},
+        [e_RTE_METER_RED] = {.min_th = 0, .max_th = 1, .maxp_inv = 10, .wq_log2 = 9},
+    }
+};
+#else
+struct rte_meter_srtcm_params app_srtcm_params[] = {
+    {.cir = 1000000000 * 0.16, .cbs = 400000, .ebs = 400000},
+};
+
+struct rte_red_params app_red_params[][e_RTE_METER_COLORS] = {
+    /* Traffic Class 0 Colors Green / Yellow / Red */
+    {
+        [e_RTE_METER_GREEN] = {.min_th = 1022, .max_th = 1023, .maxp_inv = 10, .wq_log2 = 9},
+        [e_RTE_METER_YELLOW] = {.min_th = 1022, .max_th = 1023, .maxp_inv = 10, .wq_log2 = 9},
+        [e_RTE_METER_RED] = {.min_th = 1022, .max_th = 1023, .maxp_inv = 10, .wq_log2 = 9},
+    },
+    {
+        [e_RTE_METER_GREEN] = {.min_th = 1022, .max_th = 1023, .maxp_inv = 10, .wq_log2 = 9},
+        [e_RTE_METER_YELLOW] = {.min_th = 1022, .max_th = 1023, .maxp_inv = 10, .wq_log2 = 9},
+        [e_RTE_METER_RED] = {.min_th = 0, .max_th = 1, .maxp_inv = 10, .wq_log2 = 9},
+    },
+    {
+        [e_RTE_METER_GREEN] = {.min_th = 1022, .max_th = 1023, .maxp_inv = 10, .wq_log2 = 9},
+        [e_RTE_METER_YELLOW] = {.min_th = 0, .max_th = 1, .maxp_inv = 10, .wq_log2 = 9},
+        [e_RTE_METER_RED] = {.min_th = 0, .max_th = 1, .maxp_inv = 10, .wq_log2 = 9},
+    },
+    {
+        [e_RTE_METER_GREEN] = {.min_th = 0, .max_th = 45, .maxp_inv = 10, .wq_log2 = 9},
+        [e_RTE_METER_YELLOW] = {.min_th = 0, .max_th = 1, .maxp_inv = 10, .wq_log2 = 9},
+        [e_RTE_METER_RED] = {.min_th = 0, .max_th = 1, .maxp_inv = 10, .wq_log2 = 9},
+    },
+};
+#endif
+
+struct rte_red_config app_red_cfg[APP_FLOWS_MAX][e_RTE_METER_COLORS];
+
+struct rte_meter_srtcm app_flows[APP_FLOWS_MAX];
+
+struct red_queue {
+    uint32_t size;
+    struct rte_red red;
+} app_queue[APP_FLOWS_MAX][e_RTE_METER_COLORS];
+
+uint64_t tsc_hz;
+uint64_t base_cycles[APP_FLOWS_MAX];
+uint64_t last_time;
 
 /**
  * This function will be called only once at the beginning of the test. 
@@ -20,6 +84,17 @@
 int
 qos_meter_init(void)
 {
+    uint32_t i, j;
+    int ret;
+
+    tsc_hz = rte_get_tsc_hz();
+
+    for (i = 0, j = 0; i < APP_FLOWS_MAX; i++, j = (j + 1) % RTE_DIM(app_srtcm_params)) {
+        ret = rte_meter_srtcm_config(&app_flows[i], &app_srtcm_params[j]);
+        if (ret)
+            rte_exit(EXIT_FAILURE, "rte_meter_srtcm_config failed\n");
+        base_cycles[i] = rte_get_tsc_cycles();
+    }
 
     return 0;
 }
@@ -46,7 +121,8 @@ qos_meter_init(void)
 enum qos_color
 qos_meter_run(uint32_t flow_id, uint32_t pkt_len, uint64_t time)
 {
-    return 0;
+    uint64_t cpu_cycles = base_cycles[flow_id] + (uint64_t)(time / 1000000000 * tsc_hz);
+    return rte_meter_srtcm_color_blind_check(&app_flows[flow_id], cpu_cycles, pkt_len);
 }
 
 
@@ -64,6 +140,26 @@ qos_meter_run(uint32_t flow_id, uint32_t pkt_len, uint64_t time)
 int
 qos_dropper_init(void)
 {
+    uint32_t i, j;
+    int ret;
+
+    last_time = 0;
+    for (i = 0; i < APP_FLOWS_MAX; i++) {
+        for (j = 0; j < e_RTE_METER_COLORS; j++) {
+            app_queue[i][j].size = 0;
+            ret = rte_red_rt_data_init(&app_queue[i][j].red);
+            if (ret) 
+                rte_exit(EXIT_FAILURE, "rte_red_rt_data_init failed\n");
+            ret = rte_red_config_init(
+                &app_red_cfg[i][j],
+                app_red_params[i % RTE_DIM(app_red_params)][j].wq_log2,
+                app_red_params[i % RTE_DIM(app_red_params)][j].min_th,
+                app_red_params[i % RTE_DIM(app_red_params)][j].max_th,
+                app_red_params[i % RTE_DIM(app_red_params)][j].maxp_inv);
+            if (ret)
+                rte_exit(EXIT_FAILURE, "rte_red_config_init failed\n");
+        }
+    }
      
     return 0;
 }
@@ -89,5 +185,22 @@ qos_dropper_init(void)
 int
 qos_dropper_run(uint32_t flow_id, enum qos_color color, uint64_t time)
 {
-    return 0;
+    uint32_t i, j;
+    struct red_queue *q = &app_queue[flow_id][color];
+
+    if (time != last_time) {
+        for (i = 0; i < APP_FLOWS_MAX; i++) {
+            for (j = 0; j < e_RTE_METER_COLORS; j++) {
+                app_queue[i][j].size = 0;
+                rte_red_mark_queue_empty(&app_queue[i][j].red, time);
+            }
+        }
+        last_time = time;
+    }
+
+    if (rte_red_enqueue(&app_red_cfg[flow_id][color], &q->red, q->size, time) == 0) {
+        q->size++;
+        return 0;
+    } else 
+        return 1;
 }
