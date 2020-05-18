@@ -90,12 +90,7 @@ public class Mapper {
 
                 // write to intermediate file
                 String intermName = Utils.reduceName(jobName, mapTask, i);
-                File intermFile = new File(intermName);
-                if (!intermFile.createNewFile()) {
-                    System.out.println("doMap: create immediate file failed");
-                    return;
-                }
-                FileWriter fw = new FileWriter(intermFile);
+                FileWriter fw = new FileWriter(intermName, false);
                 fw.write(intermJson);
                 fw.close();
             }

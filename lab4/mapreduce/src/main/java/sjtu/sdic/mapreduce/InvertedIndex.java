@@ -17,12 +17,25 @@ public class InvertedIndex {
 
     public static List<KeyValue> mapFunc(String file, String value) {
         // Your code here (Part V)
-        return null;
+        Pattern p = Pattern.compile("[a-zA-Z0-9]+");
+        Matcher m = p.matcher(value);
+
+        List<KeyValue> kv = new ArrayList<>();
+        Set<String> keys = new HashSet<>();
+        while (m.find()) {
+            String key = m.group();
+            if (!keys.contains(key)) {
+                kv.add(new KeyValue(key, file));
+                keys.add(key);
+            }
+        }
+        return kv;
     }
 
     public static String reduceFunc(String key, String[] values) {
         //  Your code here (Part V)
-        return null;
+        Arrays.sort(values);
+        return values.length + " " + String.join(",", values);
     }
 
     public static void main(String[] args) {

@@ -86,12 +86,7 @@ public class Reducer {
             String result = JSON.toJSONString(reduceResult);
 
             // write the reduce output to outFile
-            File f = new File(outFile);
-            if (!f.createNewFile()) {
-                System.out.println("doReduce: create result file failed");
-                return;
-            }
-            FileWriter fw = new FileWriter(outFile);
+            FileWriter fw = new FileWriter(outFile, false);
             fw.write(result);
             fw.close();
         } catch (IOException e) {
