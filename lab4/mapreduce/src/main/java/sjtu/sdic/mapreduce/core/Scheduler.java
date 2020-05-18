@@ -1,5 +1,6 @@
 package sjtu.sdic.mapreduce.core;
 
+import com.alipay.sofa.rpc.core.exception.SofaRpcException;
 import sjtu.sdic.mapreduce.common.Channel;
 import sjtu.sdic.mapreduce.common.DoTaskArgs;
 import sjtu.sdic.mapreduce.common.JobPhase;
@@ -66,7 +67,7 @@ public class Scheduler {
                             latch.countDown();
                             registerChan.write(addr);
                             break;
-                        } catch (Exception e) {
+                        } catch (SofaRpcException e) {
                             e.printStackTrace();
                             registerChan.write(addr);
                         }
