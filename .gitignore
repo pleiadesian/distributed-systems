@@ -1,5 +1,7 @@
 rdt_sim
 *.o
+*.iml
+.idea/
 .vscode/
 build/
 target/

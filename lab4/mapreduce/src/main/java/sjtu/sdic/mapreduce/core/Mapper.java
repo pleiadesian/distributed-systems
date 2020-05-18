@@ -1,10 +1,13 @@
 package sjtu.sdic.mapreduce.core;
 
+import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
+import org.apache.commons.io.FileUtils;
 import sjtu.sdic.mapreduce.common.KeyValue;
 import sjtu.sdic.mapreduce.common.Utils;
 
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -65,7 +68,40 @@ public class Mapper {
      * @param mapF the user-defined map function
      */
     public static void doMap(String jobName, int mapTask, String inFile, int nReduce, MapFunc mapF) {
-       
+        try {
+            File f = new File(inFile);
+            if (!f.exists()) {
+                System.out.println("doMap: inFile not exists");
+                return;
+            }
+            String content = FileUtils.readFileToString(f, "utf-8");
+            List<KeyValue> kv = mapF.map(inFile, content);
+
+            for (int i = 0; i < nReduce; i++) {
+                // generate intermediate KeyValue List
+                List<KeyValue> intermKv = new ArrayList<>();
+                for (KeyValue item : kv) {
+                    if (hashCode(item.key) % nReduce == i)
+                        intermKv.add(item);
+                }
+
+                // convert to JSON
+                String intermJson = JSON.toJSONString(intermKv);
+
+                // write to intermediate file
+                String intermName = Utils.reduceName(jobName, mapTask, i);
+                File intermFile = new File(intermName);
+                if (!intermFile.createNewFile()) {
+                    System.out.println("doMap: create immediate file failed");
+                    return;
+                }
+                FileWriter fw = new FileWriter(intermFile);
+                fw.write(intermJson);
+                fw.close();
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     /**
