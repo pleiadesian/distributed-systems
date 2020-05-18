@@ -54,7 +54,33 @@ public class Scheduler {
         // Your code here (Part III, Part IV).
         //
         */
-
+        CountDownLatch latch = new CountDownLatch(nTasks);
+        for (int i = 0; i < nTasks; i++) {
+            DoTaskArgs doTaskArgs = new DoTaskArgs(jobName, mapFiles[i], phase, i, nOther);
+            new Thread(() -> {
+                while (true) {
+                    try {
+                        String addr = registerChan.read();
+                        try {
+                            Call.getWorkerRpcService(addr).doTask(doTaskArgs);
+                            latch.countDown();
+                            registerChan.write(addr);
+                            break;
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                            registerChan.write(addr);
+                        }
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }).start();
+        }
+        try {
+            latch.await();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
         System.out.println(String.format("Schedule: %s done", phase));
     }
 }
