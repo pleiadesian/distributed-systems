@@ -18,12 +18,21 @@ public class WordCount {
 
     public static List<KeyValue> mapFunc(String file, String value) {
         // Your code here (Part II)
-       return null;
+        Pattern p = Pattern.compile("[a-zA-Z0-9]+");
+        Matcher m = p.matcher(value);
+
+        List<KeyValue> kv = new ArrayList<>();
+        while (m.find())
+            kv.add(new KeyValue(m.group(), "1"));
+        return kv;
     }
 
     public static String reduceFunc(String key, String[] values) {
         // Your code here (Part II)
-        return null;
+        int result = 0;
+        for (String value : values)
+            result += Integer.valueOf(value);
+        return String.valueOf(result);
     }
 
     public static void main(String[] args) {
