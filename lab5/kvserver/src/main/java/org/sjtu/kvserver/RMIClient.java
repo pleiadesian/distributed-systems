@@ -12,13 +12,24 @@ public class RMIClient {
             // get register from localhost:1099(host:port)
             Registry registry = LocateRegistry.getRegistry("localhost", 1099);
             // get remote object by name
-            ComputingService computingObj = (ComputingService) registry.lookup("rmi://localhost:1099/ComputingService");
+            KVService kv = (KVService) registry.lookup("rmi://localhost:1099/ComputingService");
             // call remote object's method
-            System.out.println(computingObj.add(5, 6));
+            System.out.println("PUT a=1");
+            if (kv.put("a", "1") < 0)
+                throw(new Exception("put failed"));
+            System.out.println("READ a: " + kv.read("a"));
+            System.out.println("DELETE a");
+            if (kv.delete("a") < 0)
+                throw(new Exception("delete failed"));
+            System.out.println("READ a again");
+            if (kv.read("a") != null)
+                throw(new Exception("delete error"));
         } catch (RemoteException e) {
             System.out.println("Remote: " + e);
         } catch (NotBoundException e) {
             System.out.println("Not Bound: " + e);
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 }

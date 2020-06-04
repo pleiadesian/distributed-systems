@@ -12,16 +12,16 @@ public class RMIServer {
 
         try {
             // create server object
-            ComputingService computingServant = new ComputingServiceImpl();
+            KVService kv = new KVServiceImpl();
             // export remote object stub
-            ComputingService stub = (ComputingService) UnicastRemoteObject.exportObject(computingServant, 8889);
+            KVService stub = (KVService) UnicastRemoteObject.exportObject(kv, 8889);
 
             // open and get RMIRegistry
             LocateRegistry.createRegistry(1099);
             Registry registry = LocateRegistry.getRegistry();
             // bind name and stub, client uses the name to get corresponding object
-            registry.bind("rmi://localhost:1099/ComputingService", stub);
-            System.out.println("ComputingService is online.");
+            registry.bind("rmi://localhost:1099/KVService", stub);
+            System.out.println("KVService is online.");
         } catch (RemoteException e) {
             System.out.println("Remote: " + e);
         } catch (AlreadyBoundException e) {
