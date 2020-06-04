@@ -12,7 +12,7 @@ public class RMIClient {
             // get register from localhost:1099(host:port)
             Registry registry = LocateRegistry.getRegistry("localhost", 1099);
             // get remote object by name
-            KVService kv = (KVService) registry.lookup("rmi://localhost:1099/ComputingService");
+            KVService kv = (KVService) registry.lookup("rmi://localhost:1099/KVService");
             // call remote object's method
             System.out.println("PUT a=1");
             if (kv.put("a", "1") < 0)
