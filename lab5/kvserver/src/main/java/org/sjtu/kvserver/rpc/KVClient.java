@@ -1,18 +1,20 @@
-package org.sjtu.kvserver;
+package org.sjtu.kvserver.rpc;
+
+import org.sjtu.kvserver.service.KVService;
 
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 
-public class RMIClient {
+public class KVClient {
 
     public static void main(String[] args) {
         try{
             // get register from localhost:1099(host:port)
             Registry registry = LocateRegistry.getRegistry("localhost", 1099);
             // get remote object by name
-            KVService kv = (KVService) registry.lookup("rmi://localhost:1099/KVService");
+            KVService kv = (KVService) registry.lookup("KVService");
             // call remote object's method
             System.out.println("PUT a=1");
             if (kv.put("a", "1") < 0)

@@ -1,4 +1,4 @@
-package org.sjtu.kvserver;
+package org.sjtu.kvserver.service;
 
 import java.rmi.Remote;
 import java.rmi.RemoteException;

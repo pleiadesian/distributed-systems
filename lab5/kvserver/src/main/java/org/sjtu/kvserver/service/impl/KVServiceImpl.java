@@ -1,4 +1,6 @@
-package org.sjtu.kvserver;
+package org.sjtu.kvserver.service.impl;
+
+import org.sjtu.kvserver.service.KVService;
 
 import java.rmi.RemoteException;
 import java.util.HashMap;
