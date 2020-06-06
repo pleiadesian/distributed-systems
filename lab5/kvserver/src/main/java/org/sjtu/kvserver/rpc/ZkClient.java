@@ -15,13 +15,13 @@ public class ZkClient {
     public static void main(String[] args) {
         try{
             // get register from localhost:1099(host:port)
-            Registry registry = LocateRegistry.getRegistry("localhost", 1099);
+            Registry registry = LocateRegistry.getRegistry("139.196.33.196", 1099);
             // get remote object by name
-            ZkService kv = (ZkService) registry.lookup("ZkService");
+            ZkService zk = (ZkService) registry.lookup("ZkService");
             // call remote object's method
             Map<String, Integer> objectNodeMap = new TreeMap<>(); // IP => COUNT
             for (int object = 0; object <= 999; ++object) {
-                String nodeIp = kv.getNode(Integer.toString(object));
+                String nodeIp = zk.getNode(Integer.toString(object));
                 Integer count = objectNodeMap.get(nodeIp);
                 objectNodeMap.put(nodeIp, (count == null ? 0 : count + 1));
             }

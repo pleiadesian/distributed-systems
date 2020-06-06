@@ -23,7 +23,7 @@ public class KVServer {
     public static void main(String[] args) {
         try {
             // set public IP of rmi server
-            String ip = IPSolver.getPublicIP();
+            String ip = args[0];
             System.setProperty("java.rmi.server.hostname", ip);
 
             // register to zookeeper
