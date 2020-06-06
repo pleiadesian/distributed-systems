@@ -42,7 +42,6 @@ public class KVServer {
             zkClient.createEphemeral(path);
             zkClient.writeData(path, serverInfo);
 
-            RMISocketFactory.setSocketFactory(new SMRMISocket());
             // create server object
             KVService kv = new KVServiceImpl();
             // export remote object stub

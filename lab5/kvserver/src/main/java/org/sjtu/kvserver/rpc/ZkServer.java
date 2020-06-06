@@ -28,7 +28,6 @@ public class ZkServer {
             Thread zkThread = new Thread(zkWatcher);
             zkThread.start();
 
-            RMISocketFactory.setSocketFactory(new SMRMISocket());
             // create server object
             ZkService zkService = new ZkServiceImpl();
             // export remote object stub
