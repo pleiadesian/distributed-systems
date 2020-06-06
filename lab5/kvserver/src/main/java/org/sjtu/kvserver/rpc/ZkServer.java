@@ -6,19 +6,29 @@ import org.sjtu.kvserver.service.impl.KVServiceImpl;
 import org.sjtu.kvserver.service.impl.ZkServiceImpl;
 import org.sjtu.kvserver.zkp.ZkWatcher;
 
+import java.io.IOException;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
 import java.rmi.AlreadyBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
+import java.rmi.server.RMISocketFactory;
 import java.rmi.server.UnicastRemoteObject;
+import java.util.Enumeration;
 
 public class ZkServer {
     public static void main(String[] args) {
         try {
+            // set public IP of rmi server
+            String ip = IPSolver.getPublicIP();
+            System.setProperty("java.rmi.server.hostname", ip);
+
             ZkWatcher zkWatcher = new ZkWatcher();
             Thread zkThread = new Thread(zkWatcher);
             zkThread.start();
 
+            RMISocketFactory.setSocketFactory(new SMRMISocket());
             // create server object
             ZkService zkService = new ZkServiceImpl();
             // export remote object stub
@@ -34,6 +44,8 @@ public class ZkServer {
             System.out.println("Remote: " + e);
         } catch (AlreadyBoundException e) {
             System.out.println("Already Bound: " + e);
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 }

@@ -12,7 +12,7 @@ public class KVClient {
     public static void main(String[] args) {
         try{
             // get register from localhost:1099(host:port)
-            Registry registry = LocateRegistry.getRegistry("localhost", 1099);
+            Registry registry = LocateRegistry.getRegistry("106.14.124.46", 1099);
             // get remote object by name
             KVService kv = (KVService) registry.lookup("KVService");
             // call remote object's method
