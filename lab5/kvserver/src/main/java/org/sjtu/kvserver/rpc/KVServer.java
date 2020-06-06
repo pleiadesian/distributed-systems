@@ -1,6 +1,5 @@
 package org.sjtu.kvserver.rpc;
 
-import com.sun.security.ntlm.Server;
 import org.I0Itec.zkclient.ZkClient;
 import org.I0Itec.zkclient.serialize.SerializableSerializer;
 import org.sjtu.kvserver.entity.ServerInfo;

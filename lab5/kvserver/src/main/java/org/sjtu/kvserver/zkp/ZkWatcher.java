@@ -11,16 +11,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class ZkWatcher {
+public class ZkWatcher implements Runnable {
 
     private static List<String> childs;
-    private static ConsistentHashing ch = new ConsistentHashing();
+    public static ConsistentHashing ch = new ConsistentHashing();
 
-    public String getNode(String key) {
-        return ch.getObjectNode(key);
-    }
-
-    public ZkWatcher() {
+    @Override
+    public void run() {
         String connectString = "172.19.44.153:2181,172.19.44.155:2181,172.19.44.158:2181";
         ZkClient zkClient = new ZkClient(connectString, 5000, 5000, new SerializableSerializer());
 
@@ -57,15 +54,13 @@ public class ZkWatcher {
             ch.addPhysicalNode(child);
         }
 
-        System.out.println("Zookeeper watcher initialized");
-
-//        while (true) {
-//            try {
-//                Thread.sleep(1000);
-//            } catch (InterruptedException e) {
-//                e.printStackTrace();
-//            }
-//            System.err.println("Zookeeper watcher running");
-//        }
+        while (true) {
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            System.err.println("Zookeeper watcher running");
+        }
     }
 }

@@ -15,10 +15,14 @@ import java.rmi.server.UnicastRemoteObject;
 public class ZkServer {
     public static void main(String[] args) {
         try {
+            ZkWatcher zkWatcher = new ZkWatcher();
+            Thread zkThread = new Thread(zkWatcher);
+            zkThread.start();
+
             // create server object
             ZkService zkService = new ZkServiceImpl();
             // export remote object stub
-            KVService stub = (KVService) UnicastRemoteObject.exportObject(zkService, 8889);
+            ZkService stub = (ZkService) UnicastRemoteObject.exportObject(zkService, 8889);
 
             // open and get RMIRegistry
             LocateRegistry.createRegistry(1099);
