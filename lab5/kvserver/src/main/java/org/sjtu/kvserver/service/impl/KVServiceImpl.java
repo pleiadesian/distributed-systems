@@ -3,12 +3,14 @@ package org.sjtu.kvserver.service.impl;
 import org.sjtu.kvserver.service.KVService;
 
 import java.rmi.RemoteException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class KVServiceImpl implements KVService {
 
-    private static Map<String, String> kv = new HashMap<String, String>();
+    private static Map<String, String> kv = new HashMap<>();
 
     public int put(String key, String value) throws RemoteException {
         kv.put(key, value);
@@ -22,5 +24,9 @@ public class KVServiceImpl implements KVService {
     public int delete(String key) throws RemoteException {
         kv.remove(key);
         return 0;
+    }
+
+    public List<String> getKeys() throws RemoteException {
+        return new ArrayList<>(kv.keySet());
     }
 }

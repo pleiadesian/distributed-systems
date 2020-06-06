@@ -6,7 +6,10 @@ import org.I0Itec.zkclient.ZkClient;
 import org.I0Itec.zkclient.serialize.SerializableSerializer;
 import org.sjtu.kvserver.dht.ConsistentHashing;
 import org.sjtu.kvserver.entity.ServerInfo;
+import org.sjtu.kvserver.service.KVService;
 
+import java.rmi.registry.LocateRegistry;
+import java.rmi.registry.Registry;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,9 +37,22 @@ public class ZkWatcher implements Runnable {
                 // add a child
                 for (String child : childList) {
                     if (!childs.contains(child)) {
-                        childs.add(child);
                         ch.addPhysicalNode(child);
                         System.out.println("Add " + child);
+                        for (String migChild : childList) {
+                            Registry fromRegistry = LocateRegistry.getRegistry(migChild, 1099);
+                            KVService fromKv = (KVService) fromRegistry.lookup("KVService");
+                            Registry toRegistry = LocateRegistry.getRegistry(child, 1099);
+                            KVService toKv = (KVService) toRegistry.lookup("KVService");
+                            List<String> keys = fromKv.getKeys();
+                            // the key-value pair should be stolen by new server from the target server
+                            for (String key : keys) {
+                                if (child.equals(ch.getObjectNode(key))) {
+                                    toKv.put(key, fromKv.read(key));
+                                }
+                            }
+                        }
+                        childs.add(child);
                     }
                 }
                 // delete a child
@@ -45,6 +61,14 @@ public class ZkWatcher implements Runnable {
                         childs.remove(child);
                         ch.removePhysicalNode(child);
                         System.out.println("Delete " + child);
+                        Registry fromRegistry = LocateRegistry.getRegistry(child, 1099);
+                        KVService fromKv = (KVService) fromRegistry.lookup("KVService");
+                        // distribute all key-value pairs to the other data nodes
+                        for (String key : fromKv.getKeys()) {
+                            Registry toRegistry = LocateRegistry.getRegistry(ch.getObjectNode(key), 1099);
+                            KVService toKv = (KVService) toRegistry.lookup("KVService");
+                            toKv.put(key, fromKv.read(key));
+                        }
                     }
                 }
             }
