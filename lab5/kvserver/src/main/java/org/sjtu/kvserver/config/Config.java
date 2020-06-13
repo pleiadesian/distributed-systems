@@ -1,5 +1,8 @@
 package org.sjtu.kvserver.config;
 
+import org.I0Itec.zkclient.ZkClient;
+import org.I0Itec.zkclient.serialize.SerializableSerializer;
+
 public class Config {
 
     public final static String clusterPath = "/clusterServer";

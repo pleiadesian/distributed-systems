@@ -13,6 +13,7 @@ public class KVServiceImpl implements KVService {
     private static Map<String, String> kv = new HashMap<>();
 
     public int put(String key, String value) throws RemoteException {
+        System.out.println();
         kv.put(key, value);
         return 0;
     }

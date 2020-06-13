@@ -27,9 +27,22 @@ public class ZkWatcher implements Runnable {
     public void run() {
         zkClient = new ZkClient(connectString, 5000, 5000, new SerializableSerializer());
 
+        // todo: auto-cleaning when system quits
+        if (zkClient.exists(clusterPath)) {
+            zkClient.deleteRecursive(clusterPath);
+        }
+        if (zkClient.exists(registryPath)) {
+            zkClient.deleteRecursive(registryPath);
+        }
+
+        // init root node in zookeeper
+        if (!zkClient.exists(clusterPath)) {
+            zkClient.createPersistent(clusterPath);
+        }
         if (!zkClient.exists(registryPath)) {
             zkClient.createPersistent(registryPath);
         }
+
         childs = zkClient.getChildren(registryPath);
         zkClient.subscribeChildChanges(registryPath, new IZkChildListener() {
             @Override

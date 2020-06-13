@@ -7,21 +7,26 @@ import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
+import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class ClusterClient {
 
     public static void main(String[] args) {
         try{
-            Registry registry = LocateRegistry.getRegistry("139.196.33.196", 1099);
+            Registry registry = LocateRegistry.getRegistry("47.101.211.167", 1099);
             ZkService zk = (ZkService) registry.lookup("ZkService");
 
             Map<String, String> kvs = new HashMap<>();
+            Map<String, ReentrantReadWriteLock> rwlMap = new HashMap<>();
 
             // create
             Thread th0 = new Thread() {
                 @Override
                 public void run() {
+                    SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
                     while (true) {
                         try {
                             String key = UUID.randomUUID().toString();
@@ -29,7 +34,17 @@ public class ClusterClient {
                             String nodeIp = zk.getNode(key);
                             Registry nodeRegistry = LocateRegistry.getRegistry(nodeIp, 1099);
                             KVService kv = (KVService) nodeRegistry.lookup("KVService");
+
+                            ReentrantReadWriteLock rwl = rwlMap.get(key);
+                            if (rwl == null) {
+                                rwl = new ReentrantReadWriteLock();
+                                rwlMap.put(key, rwl);
+                            }
+                            rwl.writeLock().lock();
                             kv.put(key, value);
+                            kvs.put(key, value);
+                            rwl.writeLock().unlock();
+                            System.out.println(String.format("%s PUT %s=%s", df.format(new Date()), key, value));
                         } catch (Exception e) {
                             e.printStackTrace();
                         }
@@ -41,8 +56,13 @@ public class ClusterClient {
             Thread th1 = new Thread() {
                 @Override
                 public void run() {
+                    SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
                     while (true) {
                         try {
+                            if (kvs.isEmpty()) {
+                                sleep(1000);
+                                continue;
+                            }
                             String[] keys = kvs.keySet().toArray(new String[0]);
                             Random random = new Random();
                             String key = keys[random.nextInt(keys.length)];
@@ -50,7 +70,13 @@ public class ClusterClient {
                             String nodeIp = zk.getNode(key);
                             Registry nodeRegistry = LocateRegistry.getRegistry(nodeIp, 1099);
                             KVService kv = (KVService) nodeRegistry.lookup("KVService");
+
+                            ReentrantReadWriteLock rwl = rwlMap.get(key);
+                            rwl.writeLock().lock();
                             kv.put(key, value);
+                            kvs.put(key, value);
+                            rwl.writeLock().unlock();
+                            System.out.println(String.format("%s PUT %s=%s", df.format(new Date()), key, value));
                         } catch (Exception e) {
                             e.printStackTrace();
                         }
@@ -62,15 +88,25 @@ public class ClusterClient {
             Thread th2 = new Thread() {
                 @Override
                 public void run() {
+                    SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
                     while (true) {
                         try {
+                            if (kvs.isEmpty()) {
+                                sleep(1000);
+                                continue;
+                            }
                             String[] keys = kvs.keySet().toArray(new String[0]);
                             Random random = new Random();
                             String key = keys[random.nextInt(keys.length)];
                             String nodeIp = zk.getNode(key);
                             Registry nodeRegistry = LocateRegistry.getRegistry(nodeIp, 1099);
                             KVService kv = (KVService) nodeRegistry.lookup("KVService");
+                            ReentrantReadWriteLock rwl = rwlMap.get(key);
+                            rwl.writeLock().lock();
                             kv.delete(key);
+                            kvs.remove(key);
+                            rwl.writeLock().unlock();
+                            System.out.println(String.format("%s DELETE %s", df.format(new Date()), key));
                         } catch (Exception e) {
                             e.printStackTrace();
                         }
@@ -82,21 +118,35 @@ public class ClusterClient {
             Thread th3 = new Thread() {
                 @Override
                 public void run() {
+                    SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
                     while (true) {
                         try {
+                            if (kvs.isEmpty()) {
+                                sleep(1000);
+                                continue;
+                            }
                             String[] keys = kvs.keySet().toArray(new String[0]);
                             Random random = new Random();
                             String key = keys[random.nextInt(keys.length)];
                             String nodeIp = zk.getNode(key);
                             Registry nodeRegistry = LocateRegistry.getRegistry(nodeIp, 1099);
                             KVService kv = (KVService) nodeRegistry.lookup("KVService");
+                            ReentrantReadWriteLock rwl = rwlMap.get(key);
+                            rwl.writeLock().lock();
                             String localValue = kvs.get(key);
                             String remoteValue = kv.read(key);
-                            if (!remoteValue.equals(localValue)) {
+                            if (remoteValue != null && localValue == null) {
+                                throw(new Exception(String.format("expected <%s, NULL>, get <%s, %s>",
+                                        key, key, remoteValue)));
+                            } else if (remoteValue == null && localValue != null) {
+                                throw(new Exception(String.format("expected <%s, %s>, get <%s, NULL>",
+                                        key, localValue, key)));
+                            } else if (remoteValue != null && localValue != null && !remoteValue.equals(localValue)) {
                                 throw(new Exception(String.format("expected <%s, %s>, get <%s, %s>",
                                         key, localValue, key, remoteValue)));
                             }
-
+                            rwl.writeLock().unlock();
+                            System.out.println(String.format("%s GET %s=%s", df.format(new Date()), key, remoteValue));
                         } catch (Exception e) {
                             e.printStackTrace();
                         }

@@ -31,21 +31,57 @@ public class KVServer {
     private static Thread followTh;
     private static ServerInfo masterInfo;
 
+    public static void takeMaster(String path) {
+        try {
+            zkClient.createEphemeral(path);
+            zkClient.writeData(path, serverInfo);
+            System.out.println(String.format("%s on %s takes master", serverInfo.getIp(), serverInfo.getNodeId()));
+        } catch (ZkNodeExistsException e) {
+            // follow new master
+            masterInfo = zkClient.readData(path);
+            followTh = new Thread() {
+                @Override
+                public void run() {
+                    try {
+                        String masterIp = masterInfo.getIp();
+                        Registry fromRegistry = LocateRegistry.getRegistry(masterIp, 1099);
+                        KVService fromKv = (KVService) fromRegistry.lookup("KVService");
+                        Registry toRegistry = LocateRegistry.getRegistry("localhost", 1099);
+                        KVService toKv = (KVService) toRegistry.lookup("KVService");
+                        while (!this.isInterrupted()) {
+                            for (String key : fromKv.getKeys()) {
+                                toKv.put(key, fromKv.read(key));
+                            }
+                            System.out.println(String.format("slave on %s syncs from master", masterInfo.getNodeId()));
+                            sleep(5000);
+                        }
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+            };
+            followTh.start();
+        }
+    }
+
     public static void main(String[] args) {
         try {
+
             // construct this server's information
             String ip = args[0];
             String nodeId = args[1];
             int port = 1099;
             String domain = "KVService";
             serverInfo = new ServerInfo(ip, domain, nodeId, port);
-
+            zkClient = new ZkClient(connectString, 5000, 5000, new SerializableSerializer());
             System.setProperty("java.rmi.server.hostname", ip);
 
-            // register to zookeeper
-            zkClient = new ZkClient(connectString, 5000, 5000, new SerializableSerializer());
+            // init root node in zookeeper
             if (!zkClient.exists(clusterPath)) {
                 zkClient.createPersistent(clusterPath);
+            }
+            if (!zkClient.exists(registryPath)) {
+                zkClient.createPersistent(registryPath);
             }
 
             // start kv service
@@ -58,6 +94,7 @@ public class KVServer {
 
             // compete for master
             String path = String.format("%s/%s", clusterPath, nodeId);
+            takeMaster(path);
             zkClient.subscribeDataChanges(path, new IZkDataListener() {
                 @Override
                 public void handleDataChange(String s, Object o) throws Exception {
@@ -75,36 +112,7 @@ public class KVServer {
                     }
 
                     // compete for master
-                    try {
-                        zkClient.createEphemeral(path);
-                        zkClient.writeData(path, serverInfo);
-                        System.out.println(String.format("%s on %s takes master", serverInfo.getIp(), serverInfo.getNodeId()));
-                    } catch (ZkNodeExistsException e) {
-                        // follow new master
-                        masterInfo = zkClient.readData(path);
-                        followTh = new Thread() {
-                            @Override
-                            public void run() {
-                                try {
-                                    String masterIp = masterInfo.getIp();
-                                    Registry fromRegistry = LocateRegistry.getRegistry(masterIp, 1099);
-                                    KVService fromKv = (KVService) fromRegistry.lookup("KVService");
-                                    Registry toRegistry = LocateRegistry.getRegistry("localhost", 1099);
-                                    KVService toKv = (KVService) toRegistry.lookup("KVService");
-                                    while (!this.isInterrupted()) {
-                                        for (String key : fromKv.getKeys()) {
-                                            toKv.put(key, fromKv.read(key));
-                                        }
-                                        System.out.println(String.format("slave on %s syncs from master", masterInfo.getNodeId()));
-                                        sleep(5000);
-                                    }
-                                } catch (Exception e) {
-                                    e.printStackTrace();
-                                }
-                            }
-                        };
-                        followTh.start();
-                    }
+                    takeMaster(path);
                 }
             });
 
