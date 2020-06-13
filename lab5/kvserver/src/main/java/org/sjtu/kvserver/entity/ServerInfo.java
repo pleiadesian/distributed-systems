@@ -5,6 +5,7 @@ import java.io.Serializable;
 public class ServerInfo implements Serializable {
     private String ip;
     private String domain;
+    private String nodeId;
     private int port;
 
     public String getIp() {
@@ -23,6 +24,14 @@ public class ServerInfo implements Serializable {
         this.domain = domain;
     }
 
+    public String getNodeId() {
+        return nodeId;
+    }
+
+    public void setNodeId(String nodeId) {
+        this.nodeId = nodeId;
+    }
+
     public int getPort() {
         return port;
     }
@@ -31,9 +40,10 @@ public class ServerInfo implements Serializable {
         this.port = port;
     }
 
-    public ServerInfo(String ip, String domain, int port) {
+    public ServerInfo(String ip, String domain, String nodeId, int port) {
         this.ip = ip;
         this.domain = domain;
+        this.nodeId = nodeId;
         this.port = port;
     }
 
@@ -42,6 +52,7 @@ public class ServerInfo implements Serializable {
         return "ServerInfo{" +
                 "ip='" + ip + '\'' +
                 ", domain='" + domain + '\'' +
+                ", nodeId='" + nodeId + '\'' +
                 ", port=" + port +
                 '}';
     }
