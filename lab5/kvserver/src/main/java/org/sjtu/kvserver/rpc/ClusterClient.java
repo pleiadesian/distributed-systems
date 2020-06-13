@@ -21,6 +21,7 @@ public class ClusterClient {
 
             Map<String, String> kvs = new HashMap<>();
             Map<String, ReentrantReadWriteLock> rwlMap = new HashMap<>();
+            ReentrantReadWriteLock kvsRwl = new ReentrantReadWriteLock();
 
             // create
             Thread th0 = new Thread() {
@@ -40,11 +41,13 @@ public class ClusterClient {
                                 rwl = new ReentrantReadWriteLock();
                                 rwlMap.put(key, rwl);
                             }
+                            kvsRwl.writeLock().lock();
                             rwl.writeLock().lock();
                             kv.put(key, value);
                             kvs.put(key, value);
                             rwl.writeLock().unlock();
-                            System.out.println(String.format("%s PUT %s=%s", df.format(new Date()), key, value));
+                            kvsRwl.writeLock().unlock();
+                            System.out.println(String.format("%s PUT %s=%s on %s", df.format(new Date()), key, value, nodeIp));
                         } catch (Exception e) {
                             e.printStackTrace();
                         }
@@ -63,7 +66,9 @@ public class ClusterClient {
                                 sleep(1000);
                                 continue;
                             }
+                            kvsRwl.readLock().lock();
                             String[] keys = kvs.keySet().toArray(new String[0]);
+                            kvsRwl.readLock().unlock();
                             Random random = new Random();
                             String key = keys[random.nextInt(keys.length)];
                             String value = Long.toString(System.currentTimeMillis());
@@ -72,11 +77,13 @@ public class ClusterClient {
                             KVService kv = (KVService) nodeRegistry.lookup("KVService");
 
                             ReentrantReadWriteLock rwl = rwlMap.get(key);
+                            kvsRwl.writeLock().lock();
                             rwl.writeLock().lock();
                             kv.put(key, value);
                             kvs.put(key, value);
                             rwl.writeLock().unlock();
-                            System.out.println(String.format("%s PUT %s=%s", df.format(new Date()), key, value));
+                            kvsRwl.writeLock().unlock();
+                            System.out.println(String.format("%s PUT %s=%s on %s", df.format(new Date()), key, value, nodeIp));
                         } catch (Exception e) {
                             e.printStackTrace();
                         }
@@ -95,18 +102,23 @@ public class ClusterClient {
                                 sleep(1000);
                                 continue;
                             }
+                            kvsRwl.readLock().lock();
                             String[] keys = kvs.keySet().toArray(new String[0]);
+                            kvsRwl.readLock().unlock();
                             Random random = new Random();
                             String key = keys[random.nextInt(keys.length)];
                             String nodeIp = zk.getNode(key);
                             Registry nodeRegistry = LocateRegistry.getRegistry(nodeIp, 1099);
                             KVService kv = (KVService) nodeRegistry.lookup("KVService");
+
                             ReentrantReadWriteLock rwl = rwlMap.get(key);
+                            kvsRwl.writeLock().lock();
                             rwl.writeLock().lock();
                             kv.delete(key);
                             kvs.remove(key);
                             rwl.writeLock().unlock();
-                            System.out.println(String.format("%s DELETE %s", df.format(new Date()), key));
+                            kvsRwl.writeLock().unlock();
+                            System.out.println(String.format("%s DELETE %s on %s", df.format(new Date()), key, nodeIp));
                         } catch (Exception e) {
                             e.printStackTrace();
                         }
@@ -125,14 +137,16 @@ public class ClusterClient {
                                 sleep(1000);
                                 continue;
                             }
+                            kvsRwl.readLock().lock();
                             String[] keys = kvs.keySet().toArray(new String[0]);
+                            kvsRwl.readLock().unlock();
                             Random random = new Random();
                             String key = keys[random.nextInt(keys.length)];
                             String nodeIp = zk.getNode(key);
                             Registry nodeRegistry = LocateRegistry.getRegistry(nodeIp, 1099);
                             KVService kv = (KVService) nodeRegistry.lookup("KVService");
                             ReentrantReadWriteLock rwl = rwlMap.get(key);
-                            rwl.writeLock().lock();
+                            rwl.readLock().lock();
                             String localValue = kvs.get(key);
                             String remoteValue = kv.read(key);
                             if (remoteValue != null && localValue == null) {
@@ -145,8 +159,8 @@ public class ClusterClient {
                                 throw(new Exception(String.format("expected <%s, %s>, get <%s, %s>",
                                         key, localValue, key, remoteValue)));
                             }
-                            rwl.writeLock().unlock();
-                            System.out.println(String.format("%s GET %s=%s", df.format(new Date()), key, remoteValue));
+                            rwl.readLock().unlock();
+                            System.out.println(String.format("%s READ %s=%s on %s", df.format(new Date()), key, remoteValue, nodeIp));
                         } catch (Exception e) {
                             e.printStackTrace();
                         }

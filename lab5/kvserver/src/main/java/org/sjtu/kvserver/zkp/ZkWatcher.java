@@ -53,6 +53,7 @@ public class ZkWatcher implements Runnable {
                         ch.addPhysicalNode(child);
                         System.out.println("Add " + child);
                         for (String migChild : childList) {
+                            System.out.println(String.format("migrating from %s to %s", migChild, child));
                             String migChildIP = ((ServerInfo)zkClient.readData(String.format("%s/%s", clusterPath, migChild))).getIp();
                             String childIP = ((ServerInfo)zkClient.readData(String.format("%s/%s", clusterPath, child))).getIp();
                             Registry fromRegistry = LocateRegistry.getRegistry(migChildIP, 1099);
@@ -67,6 +68,7 @@ public class ZkWatcher implements Runnable {
                                 }
                             }
                         }
+                        System.out.println("migration finished");
                         childs.add(child);
                         zkClient.subscribeDataChanges(String.format("%s/%s", registryPath, child), new IZkDataListener() {
                             @Override
@@ -79,6 +81,7 @@ public class ZkWatcher implements Runnable {
                                     String childIP = ((ServerInfo) zkClient.readData(String.format("%s/%s", clusterPath, child))).getIp();
                                     Registry fromRegistry = LocateRegistry.getRegistry(childIP, 1099);
                                     KVService fromKv = (KVService) fromRegistry.lookup("KVService");
+                                    System.out.println("migrating key-value to other nodes");
                                     // distribute all key-value pairs to the other data nodes
                                     for (String key : fromKv.getKeys()) {
                                         String targetIP = ((ServerInfo) zkClient.readData(String.format("%s/%s", clusterPath, ch.getObjectNode(key)))).getIp();
@@ -87,6 +90,7 @@ public class ZkWatcher implements Runnable {
                                         toKv.put(key, fromKv.read(key));
                                     }
                                     zkClient.delete(String.format("%s/%s", registryPath, child));
+                                    System.out.println("migration finished");
                                 }
                             }
 
