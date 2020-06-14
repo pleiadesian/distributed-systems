@@ -7,6 +7,7 @@ import org.I0Itec.zkclient.serialize.SerializableSerializer;
 import org.sjtu.kvserver.dht.ConsistentHashing;
 import org.sjtu.kvserver.entity.NodeInfo;
 import org.sjtu.kvserver.entity.ServerInfo;
+import org.sjtu.kvserver.lock.ZkpDistributedReadWriteLock;
 import org.sjtu.kvserver.service.KVService;
 
 import java.rmi.registry.LocateRegistry;
@@ -21,37 +22,61 @@ public class ZkWatcher implements Runnable {
 
     private static List<String> childs;
     public static ConsistentHashing ch = new ConsistentHashing();
-    public static ZkClient zkClient;
+    private static ZkpDistributedReadWriteLock zkrwl = new ZkpDistributedReadWriteLock();
+
+    private static void subscribeOffline(String child) {
+        zkClient.subscribeDataChanges(String.format("%s/%s", registryPath, child), new IZkDataListener() {
+            @Override
+            public void handleDataChange(String s, Object o) throws Exception {
+                // todo: lock and test this part
+                if (((NodeInfo) o).isOffline()) {
+                    zkrwl.lockWrite();
+                    childs.remove(child);
+                    ch.removePhysicalNode(child);
+                    System.out.println("Delete " + child);
+
+                    // distribute all key-value pairs to the other data nodes
+                    String childIP = ((ServerInfo) zkClient.readData(String.format("%s/%s", clusterPath, child))).getIp();
+                    Registry fromRegistry = LocateRegistry.getRegistry(childIP, 1099);
+                    KVService fromKv = (KVService) fromRegistry.lookup("KVService");
+                    System.out.println("migrating key-value to other nodes");
+                    for (String key : fromKv.getKeys()) {
+                        String targetIP = ((ServerInfo) zkClient.readData(String.format("%s/%s", clusterPath, ch.getObjectNode(key)))).getIp();
+                        Registry toRegistry = LocateRegistry.getRegistry(targetIP, 1099);
+                        KVService toKv = (KVService) toRegistry.lookup("KVService");
+                        toKv.put(key, fromKv.read(key));
+                    }
+
+                    zkClient.delete(String.format("%s/%s", registryPath, child));
+                    System.out.println("migration finished");
+                    zkrwl.unlockWrite();
+                }
+            }
+
+            @Override
+            public void handleDataDeleted(String s) throws Exception {
+
+            }
+        });
+    }
 
     @Override
     public void run() {
-        zkClient = new ZkClient(connectString, 5000, 5000, new SerializableSerializer());
-
-        // todo: auto-cleaning when system quits
-        if (zkClient.exists(clusterPath)) {
-            zkClient.deleteRecursive(clusterPath);
-        }
-        if (zkClient.exists(registryPath)) {
-            zkClient.deleteRecursive(registryPath);
-        }
-
-        // init root node in zookeeper
-        if (!zkClient.exists(clusterPath)) {
-            zkClient.createPersistent(clusterPath);
-        }
-        if (!zkClient.exists(registryPath)) {
-            zkClient.createPersistent(registryPath);
-        }
-
+        zkrwl.lockWrite();
         childs = zkClient.getChildren(registryPath);
+
+        // monitor if a new child is added
         zkClient.subscribeChildChanges(registryPath, new IZkChildListener() {
             @Override
             public void handleChildChange(String path, List<String> childList) throws Exception {
                 // register a new kv node
                 for (String child : childList) {
                     if (!childs.contains(child)) {
+                        zkrwl.lockWrite();
                         ch.addPhysicalNode(child);
                         System.out.println("Add " + child);
+
+                        // migrating key-value from old nodes to new node
                         for (String migChild : childList) {
                             System.out.println(String.format("migrating from %s to %s", migChild, child));
                             String migChildIP = ((ServerInfo)zkClient.readData(String.format("%s/%s", clusterPath, migChild))).getIp();
@@ -69,44 +94,22 @@ public class ZkWatcher implements Runnable {
                             }
                         }
                         System.out.println("migration finished");
+
                         childs.add(child);
-                        zkClient.subscribeDataChanges(String.format("%s/%s", registryPath, child), new IZkDataListener() {
-                            @Override
-                            public void handleDataChange(String s, Object o) throws Exception {
-                                // todo: lock
-                                if (((NodeInfo) o).isOffline()) {
-                                    childs.remove(child);
-                                    ch.removePhysicalNode(child);
-                                    System.out.println("Delete " + child);
-                                    String childIP = ((ServerInfo) zkClient.readData(String.format("%s/%s", clusterPath, child))).getIp();
-                                    Registry fromRegistry = LocateRegistry.getRegistry(childIP, 1099);
-                                    KVService fromKv = (KVService) fromRegistry.lookup("KVService");
-                                    System.out.println("migrating key-value to other nodes");
-                                    // distribute all key-value pairs to the other data nodes
-                                    for (String key : fromKv.getKeys()) {
-                                        String targetIP = ((ServerInfo) zkClient.readData(String.format("%s/%s", clusterPath, ch.getObjectNode(key)))).getIp();
-                                        Registry toRegistry = LocateRegistry.getRegistry(targetIP, 1099);
-                                        KVService toKv = (KVService) toRegistry.lookup("KVService");
-                                        toKv.put(key, fromKv.read(key));
-                                    }
-                                    zkClient.delete(String.format("%s/%s", registryPath, child));
-                                    System.out.println("migration finished");
-                                }
-                            }
-
-                            @Override
-                            public void handleDataDeleted(String s) throws Exception {
-
-                            }
-                        });
+                        subscribeOffline(child);
+                        zkrwl.unlockWrite();
                     }
                 }
             }
         });
 
+        // monitor existing childs
         for (String child : childs) {
             ch.addPhysicalNode(child);
+            subscribeOffline(child);
         }
+
+        zkrwl.unlockWrite();
 
         while (true) {
             try {

@@ -7,4 +7,8 @@ public interface ZkService extends Remote {
 
     String getNode(String key) throws RemoteException;
 
+    void login(String clientId) throws RemoteException;
+
+    void logout(String clientId) throws RemoteException;
+
 }

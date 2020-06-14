@@ -17,12 +17,19 @@ import java.rmi.server.RMISocketFactory;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.Enumeration;
 
+import static org.sjtu.kvserver.config.Config.connect;
+import static org.sjtu.kvserver.config.Config.refresh;
+
 public class ZkServer {
     public static void main(String[] args) {
         try {
             // set public IP of rmi server
             String ip = args[0];
             System.setProperty("java.rmi.server.hostname", ip);
+
+            connect();
+            // todo: auto-cleaning when master quits
+            refresh();
 
             ZkWatcher zkWatcher = new ZkWatcher();
             Thread zkThread = new Thread(zkWatcher);

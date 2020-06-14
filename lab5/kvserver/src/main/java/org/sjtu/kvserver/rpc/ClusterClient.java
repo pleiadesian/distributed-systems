@@ -16,6 +16,8 @@ public class ClusterClient {
 
     public static void main(String[] args) {
         try{
+            // connect to master
+            // todo: multiple master
             Registry registry = LocateRegistry.getRegistry("47.101.211.167", 1099);
             ZkService zk = (ZkService) registry.lookup("ZkService");
 
@@ -23,19 +25,27 @@ public class ClusterClient {
             Map<String, ReentrantReadWriteLock> rwlMap = new HashMap<>();
             ReentrantReadWriteLock kvsRwl = new ReentrantReadWriteLock();
 
-            // create
+            // create by PUT
             Thread th0 = new Thread() {
                 @Override
                 public void run() {
                     SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
                     while (true) {
                         try {
+                            // generate unique key-value pair
                             String key = UUID.randomUUID().toString();
                             String value = Long.toString(System.currentTimeMillis());
+
+                            // log in of the kv cluster
+                            String clientId = UUID.randomUUID().toString();
+                            zk.login(clientId);
+
+                            // get node ID
                             String nodeIp = zk.getNode(key);
                             Registry nodeRegistry = LocateRegistry.getRegistry(nodeIp, 1099);
-                            KVService kv = (KVService) nodeRegistry.lookup("KVService");
 
+                            // PUT
+                            KVService kv = (KVService) nodeRegistry.lookup("KVService");
                             ReentrantReadWriteLock rwl = rwlMap.get(key);
                             if (rwl == null) {
                                 rwl = new ReentrantReadWriteLock();
@@ -48,6 +58,9 @@ public class ClusterClient {
                             rwl.writeLock().unlock();
                             kvsRwl.writeLock().unlock();
                             System.out.println(String.format("%s PUT %s=%s on %s", df.format(new Date()), key, value, nodeIp));
+
+                            // log out of the kv cluster
+                            zk.logout(clientId);
                         } catch (Exception e) {
                             e.printStackTrace();
                         }
@@ -55,13 +68,14 @@ public class ClusterClient {
                 }
             };
 
-            // update
+            // update by PUT
             Thread th1 = new Thread() {
                 @Override
                 public void run() {
                     SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
                     while (true) {
                         try {
+                            // choose a key-value pair
                             if (kvs.isEmpty()) {
                                 sleep(1000);
                                 continue;
@@ -72,10 +86,17 @@ public class ClusterClient {
                             Random random = new Random();
                             String key = keys[random.nextInt(keys.length)];
                             String value = Long.toString(System.currentTimeMillis());
+
+                            // log in of the kv cluster
+                            String clientId = UUID.randomUUID().toString();
+                            zk.login(clientId);
+
+                            // get node ID
                             String nodeIp = zk.getNode(key);
                             Registry nodeRegistry = LocateRegistry.getRegistry(nodeIp, 1099);
-                            KVService kv = (KVService) nodeRegistry.lookup("KVService");
 
+                            // PUT
+                            KVService kv = (KVService) nodeRegistry.lookup("KVService");
                             ReentrantReadWriteLock rwl = rwlMap.get(key);
                             kvsRwl.writeLock().lock();
                             rwl.writeLock().lock();
@@ -84,6 +105,9 @@ public class ClusterClient {
                             rwl.writeLock().unlock();
                             kvsRwl.writeLock().unlock();
                             System.out.println(String.format("%s PUT %s=%s on %s", df.format(new Date()), key, value, nodeIp));
+
+                            // log out of the kv cluster
+                            zk.logout(clientId);
                         } catch (Exception e) {
                             e.printStackTrace();
                         }
@@ -91,13 +115,14 @@ public class ClusterClient {
                 }
             };
 
-            // delete
+            // delete by DELETE
             Thread th2 = new Thread() {
                 @Override
                 public void run() {
                     SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
                     while (true) {
                         try {
+                            // choose a key-value pair
                             if (kvs.isEmpty()) {
                                 sleep(1000);
                                 continue;
@@ -107,10 +132,17 @@ public class ClusterClient {
                             kvsRwl.readLock().unlock();
                             Random random = new Random();
                             String key = keys[random.nextInt(keys.length)];
+
+                            // log in of the kv cluster
+                            String clientId = UUID.randomUUID().toString();
+                            zk.login(clientId);
+
+                            // get node ID
                             String nodeIp = zk.getNode(key);
                             Registry nodeRegistry = LocateRegistry.getRegistry(nodeIp, 1099);
                             KVService kv = (KVService) nodeRegistry.lookup("KVService");
 
+                            // DELETE
                             ReentrantReadWriteLock rwl = rwlMap.get(key);
                             kvsRwl.writeLock().lock();
                             rwl.writeLock().lock();
@@ -119,6 +151,9 @@ public class ClusterClient {
                             rwl.writeLock().unlock();
                             kvsRwl.writeLock().unlock();
                             System.out.println(String.format("%s DELETE %s on %s", df.format(new Date()), key, nodeIp));
+
+                            // log out of the kv cluster
+                            zk.logout(clientId);
                         } catch (Exception e) {
                             e.printStackTrace();
                         }
@@ -126,13 +161,14 @@ public class ClusterClient {
                 }
             };
 
-            // assert
+            // read and assert by READ
             Thread th3 = new Thread() {
                 @Override
                 public void run() {
                     SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
                     while (true) {
                         try {
+                            // choose a key-value pair
                             if (kvs.isEmpty()) {
                                 sleep(1000);
                                 continue;
@@ -142,8 +178,16 @@ public class ClusterClient {
                             kvsRwl.readLock().unlock();
                             Random random = new Random();
                             String key = keys[random.nextInt(keys.length)];
+
+                            // log in of the kv cluster
+                            String clientId = UUID.randomUUID().toString();
+                            zk.login(clientId);
+
+                            // get node ID
                             String nodeIp = zk.getNode(key);
                             Registry nodeRegistry = LocateRegistry.getRegistry(nodeIp, 1099);
+
+                            // READ and assert
                             KVService kv = (KVService) nodeRegistry.lookup("KVService");
                             ReentrantReadWriteLock rwl = rwlMap.get(key);
                             rwl.readLock().lock();
@@ -161,19 +205,23 @@ public class ClusterClient {
                             }
                             rwl.readLock().unlock();
                             System.out.println(String.format("%s READ %s=%s on %s", df.format(new Date()), key, remoteValue, nodeIp));
+
+                            // log out of the kv cluster
+                            zk.logout(clientId);
                         } catch (Exception e) {
                             e.printStackTrace();
                         }
                     }
                 }
             };
+
             th0.start();
             th1.start();
             th2.start();
             th3.start();
 
             while (true) {
-                Thread.sleep(1);
+                Thread.sleep(1000);
             }
 
         } catch (RemoteException e) {

@@ -25,9 +25,7 @@ import static org.sjtu.kvserver.config.Config.*;
 
 public class KVServer {
 
-    public static ZkClient zkClient;
     public static ServerInfo serverInfo;
-
     private static Thread followTh;
     private static ServerInfo masterInfo;
 
@@ -66,23 +64,15 @@ public class KVServer {
 
     public static void main(String[] args) {
         try {
-
             // construct this server's information
             String ip = args[0];
             String nodeId = args[1];
             int port = 1099;
             String domain = "KVService";
             serverInfo = new ServerInfo(ip, domain, nodeId, port);
-            zkClient = new ZkClient(connectString, 5000, 5000, new SerializableSerializer());
             System.setProperty("java.rmi.server.hostname", ip);
 
-            // init root node in zookeeper
-            if (!zkClient.exists(clusterPath)) {
-                zkClient.createPersistent(clusterPath);
-            }
-            if (!zkClient.exists(registryPath)) {
-                zkClient.createPersistent(registryPath);
-            }
+            connect();
 
             // start kv service
             KVService kv = new KVServiceImpl();

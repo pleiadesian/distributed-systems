@@ -5,10 +5,11 @@ import org.sjtu.kvserver.service.KVService;
 import java.rmi.RemoteException;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class KVServiceImpl implements KVService {
 
-    private static Map<String, String> kv = new HashMap<>();
+    private static Map<String, String> kv = new ConcurrentHashMap<>();
     private static final SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
 
     public int put(String key, String value) throws RemoteException {
