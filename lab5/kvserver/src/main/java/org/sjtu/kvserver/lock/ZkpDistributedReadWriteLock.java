@@ -1,9 +1,14 @@
 package org.sjtu.kvserver.lock;
 
+import org.I0Itec.zkclient.IZkChildListener;
+import org.I0Itec.zkclient.IZkDataListener;
+
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
+import static java.lang.Thread.sleep;
 import static org.sjtu.kvserver.config.Config.lockPath;
 import static org.sjtu.kvserver.config.Config.zkClient;
 
@@ -19,13 +24,22 @@ public class ZkpDistributedReadWriteLock {
 
         List<String> tmp_nodes = zkClient.getChildren(lockPath);
         sortNodes(tmp_nodes);
-        tmp_nodes.forEach(System.out::println);
         int tmp_index = 0;
         for (int i = tmp_nodes.size() - 1; i >= 0; i--) {
             if (thisReadLock.equals(lockPath + "/" + tmp_nodes.get(i))) {
                 tmp_index = i;
             } else if (i < tmp_index && tmp_nodes.get(i).split("-")[0].equals(LockType.WRITE.toString())) {
-                zkClient.subscribeChildChanges(lockPath + "/" + tmp_nodes.get(i) , (parentPath , currentChilds) -> readLatch.countDown());
+                zkClient.subscribeDataChanges(lockPath + "/" + tmp_nodes.get(i), new IZkDataListener() {
+                    @Override
+                    public void handleDataChange(String s, Object o) throws Exception {
+
+                    }
+
+                    @Override
+                    public void handleDataDeleted(String s) throws Exception {
+                        readLatch.countDown();
+                    }
+                });
                 try {
                     readLatch.await();
                 } catch (InterruptedException e) {
@@ -34,6 +48,8 @@ public class ZkpDistributedReadWriteLock {
                 break;
             }
         }
+
+        System.out.println();
     }
 
     public void unlockRead()
@@ -56,12 +72,27 @@ public class ZkpDistributedReadWriteLock {
         for (int i = tmp_nodes.size() - 1; i >= 0; i--) {
             if (thisWriteLock.equals(lockPath + "/" + tmp_nodes.get(i))) {
                 if (i > 0) {
-                    zkClient.subscribeChildChanges(lockPath + "/" + tmp_nodes.get(i - 1) , (parentPath , currentChilds) -> writeLatch.countDown());
+                    String holderPath = lockPath + "/" + tmp_nodes.get(i - 1);
+                    IZkDataListener releaseListener = new IZkDataListener() {
+                        @Override
+                        public void handleDataChange(String s, Object o) throws Exception {
+
+                        }
+
+                        @Override
+                        public void handleDataDeleted(String s) throws Exception {
+                            writeLatch.countDown();
+                        }
+                    };
+                    zkClient.subscribeDataChanges(holderPath, releaseListener);
                     try {
-                        writeLatch.await();
+                        while (zkClient.getChildren(lockPath).contains(tmp_nodes.get(i - 1))) {
+                            writeLatch.await(500, TimeUnit.MILLISECONDS);
+                        }
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
+                    zkClient.unsubscribeDataChanges(holderPath, releaseListener);
                     break;
                 }
             }

@@ -1,6 +1,7 @@
 rdt_sim
 *.o
 *.iml
+*.jar
 mrtmp*
 .idea/
 .vscode/

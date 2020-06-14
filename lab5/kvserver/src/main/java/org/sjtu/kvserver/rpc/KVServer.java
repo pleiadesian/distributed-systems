@@ -22,6 +22,7 @@ import java.rmi.server.UnicastRemoteObject;
 import java.util.Enumeration;
 
 import static org.sjtu.kvserver.config.Config.*;
+import static org.sjtu.kvserver.log.LogManager.redo;
 
 public class KVServer {
 
@@ -46,12 +47,16 @@ public class KVServer {
                         KVService fromKv = (KVService) fromRegistry.lookup("KVService");
                         Registry toRegistry = LocateRegistry.getRegistry("localhost", 1099);
                         KVService toKv = (KVService) toRegistry.lookup("KVService");
+                        // TODO: migrating by sequentially read master's log
                         while (!this.isInterrupted()) {
                             for (String key : fromKv.getKeys()) {
-                                toKv.put(key, fromKv.read(key));
+                                String value = fromKv.read(key);
+                                if (value != null) {
+                                    toKv.put(key, value);
+                                }
                             }
                             System.out.println(String.format("slave on %s syncs from master", masterInfo.getNodeId()));
-                            sleep(5000);
+                            sleep(500);
                         }
                     } catch (Exception e) {
                         e.printStackTrace();
@@ -72,6 +77,7 @@ public class KVServer {
             serverInfo = new ServerInfo(ip, domain, nodeId, port);
             System.setProperty("java.rmi.server.hostname", ip);
 
+            // connect to zookeeper cluster
             connect();
 
             // start kv service
@@ -81,6 +87,9 @@ public class KVServer {
             Registry registry = LocateRegistry.getRegistry();
             registry.bind(domain, stub);
             System.out.println("KVService is online.");
+
+            // redo by scan log
+            redo(stub);
 
             // compete for master
             String path = String.format("%s/%s", clusterPath, nodeId);

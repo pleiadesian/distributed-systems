@@ -16,6 +16,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static java.lang.Thread.sleep;
 import static org.sjtu.kvserver.config.Config.*;
 
 public class ZkWatcher implements Runnable {
@@ -58,6 +59,25 @@ public class ZkWatcher implements Runnable {
 
             }
         });
+
+        // lock the cluster when a node is doing election or totally crashed
+        zkClient.subscribeDataChanges(String.format("%s/%s", clusterPath, child), new IZkDataListener() {
+            @Override
+            public void handleDataChange(String s, Object o) throws Exception {
+
+            }
+
+            @Override
+            public void handleDataDeleted(String s) throws Exception {
+                System.out.println(String.format("%s crashes, lock the cluster", s));
+                zkrwl.lockWrite();
+                while (!zkClient.exists(String.format("%s/%s", clusterPath, child))) {
+                    sleep(100);
+                }
+                zkrwl.unlockWrite();
+                System.out.println(String.format("%s recovered, unlock the cluster", s));
+            }
+        });
     }
 
     @Override
@@ -78,6 +98,9 @@ public class ZkWatcher implements Runnable {
 
                         // migrating key-value from old nodes to new node
                         for (String migChild : childList) {
+                            if (migChild.equals(child)) {
+                                continue;
+                            }
                             System.out.println(String.format("migrating from %s to %s", migChild, child));
                             String migChildIP = ((ServerInfo)zkClient.readData(String.format("%s/%s", clusterPath, migChild))).getIp();
                             String childIP = ((ServerInfo)zkClient.readData(String.format("%s/%s", clusterPath, child))).getIp();
@@ -113,11 +136,11 @@ public class ZkWatcher implements Runnable {
 
         while (true) {
             try {
-                Thread.sleep(1000);
+                sleep(1000);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
-            System.err.println("Zookeeper watcher running");
+            System.err.println("master running");
         }
     }
 }
