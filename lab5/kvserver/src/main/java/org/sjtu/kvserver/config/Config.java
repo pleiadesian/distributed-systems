@@ -10,7 +10,9 @@ public class Config {
     public final static String clusterPath = "/clusterServer";
     public final static String registryPath = "/serverRegistry";
     public final static String lockPath = "/lock";
+    public final static String masterPath = "/master";
     public final static String logFilename = "kv.log";
+    public final static String publicConnectString = "47.101.211.167:2181,139.196.42.83:2181,106.14.175.160:2181";
     private final static String connectString = "172.19.44.153:2181,172.19.44.155:2181,172.19.44.158:2181";
     public final static SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
     public static ZkClient zkClient;

@@ -1,39 +1,72 @@
 package org.sjtu.kvserver.rpc;
 
-import org.sjtu.kvserver.service.KVService;
+import org.I0Itec.zkclient.IZkDataListener;
+import org.I0Itec.zkclient.exception.ZkNodeExistsException;
+import org.sjtu.kvserver.entity.ServerInfo;
 import org.sjtu.kvserver.service.ZkService;
-import org.sjtu.kvserver.service.impl.KVServiceImpl;
 import org.sjtu.kvserver.service.impl.ZkServiceImpl;
 import org.sjtu.kvserver.zkp.ZkWatcher;
 
-import java.io.IOException;
-import java.net.InetAddress;
-import java.net.NetworkInterface;
 import java.rmi.AlreadyBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
-import java.rmi.server.RMISocketFactory;
 import java.rmi.server.UnicastRemoteObject;
-import java.util.Enumeration;
 
-import static org.sjtu.kvserver.config.Config.connect;
-import static org.sjtu.kvserver.config.Config.refresh;
+import static org.sjtu.kvserver.config.Config.*;
+import static org.sjtu.kvserver.config.Config.zkClient;
 
 public class ZkServer {
+
+    private static ServerInfo serverInfo;
+
+    private static boolean takeMaster(String path) {
+        try {
+            zkClient.createEphemeral(path);
+            zkClient.writeData(path, serverInfo);
+            System.out.println(String.format("%s on %s takes master", serverInfo.getIp(), serverInfo.getNodeId()));
+            return true;
+        } catch (ZkNodeExistsException e) {
+            return false;
+        }
+    }
+
     public static void main(String[] args) {
         try {
             // set public IP of rmi server
             String ip = args[0];
+            serverInfo = new ServerInfo(ip, "", "", 0);
             System.setProperty("java.rmi.server.hostname", ip);
 
             connect();
-            // todo: auto-cleaning when master quits
-            refresh();
+            if ("init".equals(args[1])) {
+                refresh();
+            }
 
             ZkWatcher zkWatcher = new ZkWatcher();
             Thread zkThread = new Thread(zkWatcher);
-            zkThread.start();
+
+            // compete for master
+            String path = masterPath;
+            if (takeMaster(path)) {
+                System.out.println("this node takes master");
+                zkThread.start();
+            }
+            zkClient.subscribeDataChanges(path, new IZkDataListener() {
+                @Override
+                public void handleDataChange(String s, Object o) throws Exception {
+
+                }
+
+                @Override
+                public void handleDataDeleted(String s) throws Exception {
+                    System.out.println(String.format("master %s crashes", serverInfo.getIp()));
+                    if (takeMaster(path)) {
+                        System.out.println("this node takes master");
+                        zkThread.start();
+                    }
+                }
+            });
 
             // create server object
             ZkService zkService = new ZkServiceImpl();
