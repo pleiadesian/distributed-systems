@@ -31,7 +31,7 @@ public class KVServer {
         try {
             zkClient.createEphemeral(path);
             zkClient.writeData(path, serverInfo);
-            System.out.println(String.format("%s on %s takes master", serverInfo.getIp(), serverInfo.getNodeId()));
+            logger.warning(String.format("%s on %s takes master", serverInfo.getIp(), serverInfo.getNodeId()));
         } catch (ZkNodeExistsException e) {
             // follow new master
             masterInfo = zkClient.readData(path);
@@ -52,7 +52,7 @@ public class KVServer {
                                     toKv.put(key, value);
                                 }
                             }
-                            System.out.println(String.format("slave on %s syncs from master", masterInfo.getNodeId()));
+                            logger.warning(String.format("slave on %s syncs from master", masterInfo.getNodeId()));
                             sleep(500);
                         }
                     } catch (Exception e) {
@@ -83,7 +83,7 @@ public class KVServer {
             LocateRegistry.createRegistry(port);
             Registry registry = LocateRegistry.getRegistry();
             registry.bind(domain, stub);
-            System.out.println("KVService is online.");
+            logger.warning("KVService is online.");
 
             // redo by scan log
             redo(stub);
@@ -99,7 +99,7 @@ public class KVServer {
 
                 @Override
                 public void handleDataDeleted(String s) throws Exception {
-                    System.out.println(String.format("master %s on %s crashes", masterInfo.getIp(), masterInfo.getNodeId()));
+                    logger.warning(String.format("master %s on %s crashes", masterInfo.getIp(), masterInfo.getNodeId()));
 
                     // stop syncing from master
                     if (followTh != null) {
@@ -116,9 +116,9 @@ public class KVServer {
             String registerPath = String.format("%s/%s", registryPath, nodeId);
             try {
                 zkClient.createPersistent(registerPath);
-                System.out.println(String.format("register %s", nodeId));
+                logger.warning(String.format("register %s", nodeId));
             } catch (ZkNodeExistsException e) {
-                System.out.println(String.format("%s has registered", nodeId));
+                logger.warning(String.format("%s has registered", nodeId));
             }
 
             // todo: simulate off-line workload
@@ -132,14 +132,10 @@ public class KVServer {
 
                 @Override
                 public void handleDataDeleted(String s) throws Exception {
-                    System.out.println(String.format("%s on %s quits", serverInfo.getIp(), serverInfo.getNodeId()));
+                    logger.warning(String.format("%s on %s quits", serverInfo.getIp(), serverInfo.getNodeId()));
                     System.exit(0);
                 }
             });
-        } catch (RemoteException e) {
-            System.out.println("Remote: " + e);
-        } catch (AlreadyBoundException e) {
-            System.out.println("Already Bound: " + e);
         } catch (Exception e) {
             e.printStackTrace();
         }

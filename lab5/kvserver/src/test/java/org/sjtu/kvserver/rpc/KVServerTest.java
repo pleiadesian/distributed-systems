@@ -25,10 +25,6 @@ public class KVServerTest {
             Registry registry = LocateRegistry.getRegistry("106.14.124.46", 1099);
             // get remote object by name
             kv = (KVService) registry.lookup("KVService");
-        } catch (RemoteException e) {
-            System.out.println("Remote: " + e);
-        } catch (NotBoundException e) {
-            System.out.println("Not Bound: " + e);
         } catch (Exception e) {
             e.printStackTrace();
         }

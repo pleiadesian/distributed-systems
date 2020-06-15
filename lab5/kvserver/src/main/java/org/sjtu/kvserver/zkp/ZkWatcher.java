@@ -44,13 +44,13 @@ public class ZkWatcher implements Runnable {
 
                     childs.remove(child);
                     ch.removePhysicalNode(child);
-                    System.out.println("Delete " + child);
+                    logger.warning("Delete " + child);
 
                     // distribute all key-value pairs to the other data nodes
                     String childIP = ((ServerInfo) zkClient.readData(String.format("%s/%s", clusterPath, child))).getIp();
                     Registry fromRegistry = LocateRegistry.getRegistry(childIP, 1099);
                     KVService fromKv = (KVService) fromRegistry.lookup("KVService");
-                    System.out.println("migrating key-value to other nodes");
+                    logger.warning("migrating key-value to other nodes");
                     for (String key : fromKv.getKeys()) {
                         String targetIP = ((ServerInfo) zkClient.readData(String.format("%s/%s", clusterPath, ch.getObjectNode(key)))).getIp();
                         Registry toRegistry = LocateRegistry.getRegistry(targetIP, 1099);
@@ -59,7 +59,7 @@ public class ZkWatcher implements Runnable {
                     }
 
                     zkClient.delete(String.format("%s/%s", registryPath, child));
-                    System.out.println("migration finished");
+                    logger.warning("migration finished");
 
                     // unlock the kv cluster
                     zkrwl.unlockWrite();
@@ -81,13 +81,13 @@ public class ZkWatcher implements Runnable {
 
             @Override
             public void handleDataDeleted(String s) throws Exception {
-                System.out.println(String.format("%s crashes, lock the cluster", s));
+                logger.warning(String.format("%s crashes, lock the cluster", s));
                 zkrwl.lockWrite();
                 while (!zkClient.exists(String.format("%s/%s", clusterPath, child))) {
                     sleep(100);
                 }
                 zkrwl.unlockWrite();
-                System.out.println(String.format("%s recovered, unlock the cluster", s));
+                logger.warning(String.format("%s recovered, unlock the cluster", s));
             }
         });
     }
@@ -110,14 +110,14 @@ public class ZkWatcher implements Runnable {
                         zkrwl.lockWrite();
 
                         ch.addPhysicalNode(child);
-                        System.out.println("Add " + child);
+                        logger.warning("Add " + child);
 
                         // migrating key-value from old nodes to new node
                         for (String migChild : childList) {
                             if (migChild.equals(child)) {
                                 continue;
                             }
-                            System.out.println(String.format("migrating from %s to %s", migChild, child));
+                            logger.warning(String.format("migrating from %s to %s", migChild, child));
                             String migChildIP = ((ServerInfo)zkClient.readData(String.format("%s/%s", clusterPath, migChild))).getIp();
                             String childIP = ((ServerInfo)zkClient.readData(String.format("%s/%s", clusterPath, child))).getIp();
                             Registry fromRegistry = LocateRegistry.getRegistry(migChildIP, 1099);
@@ -132,7 +132,7 @@ public class ZkWatcher implements Runnable {
                                 }
                             }
                         }
-                        System.out.println("migration finished");
+                        logger.warning("migration finished");
 
                         childs.add(child);
                         subscribeOffline(child);

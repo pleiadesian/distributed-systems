@@ -44,7 +44,7 @@ public class LogManager {
         File logFile = new File(logFilename);
 
         if (logFile.exists()) {
-            System.out.println("recovering from redo log");
+            logger.warning("recovering from redo log");
 
             // do not log any operations when recovering
             wal = false;
@@ -70,7 +70,7 @@ public class LogManager {
             inputStream.close();
             bufferedReader.close();
             wal = true;
-            System.out.println("recovery completed");
+            logger.warning("recovery completed");
         }
     }
 

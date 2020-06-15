@@ -29,7 +29,7 @@ public class ZkServer {
         try {
             zkClient.createEphemeral(path);
             zkClient.writeData(path, serverInfo);
-            System.out.println(String.format("%s on %s takes master", serverInfo.getIp(), serverInfo.getNodeId()));
+            logger.warning(String.format("%s on %s takes master", serverInfo.getIp(), serverInfo.getNodeId()));
             return true;
         } catch (ZkNodeExistsException e) {
             return false;
@@ -51,6 +51,11 @@ public class ZkServer {
                 refresh();
             }
 
+            // customize log level
+            if (args.length > 2) {
+                loggerLevelConfig(args[2]);
+            }
+
             // Zookeeper watcher thread
             ZkWatcher zkWatcher = new ZkWatcher();
             Thread zkThread = new Thread(zkWatcher);
@@ -58,7 +63,7 @@ public class ZkServer {
             // compete for master
             String path = masterPath;
             if (takeMaster(path)) {
-                System.out.println("this node takes master");
+                logger.warning("this node takes master");
                 zkThread.start();
             }
             zkClient.subscribeDataChanges(path, new IZkDataListener() {
@@ -69,9 +74,9 @@ public class ZkServer {
 
                 @Override
                 public void handleDataDeleted(String s) throws Exception {
-                    System.out.println(String.format("master %s crashes", serverInfo.getIp()));
+                    logger.warning(String.format("master %s crashes", serverInfo.getIp()));
                     if (takeMaster(path)) {
-                        System.out.println("this node takes master");
+                        logger.warning("this node takes master");
                         zkThread.start();
                     }
                 }
@@ -87,11 +92,7 @@ public class ZkServer {
             Registry registry = LocateRegistry.getRegistry();
             // bind name and stub, client uses the name to get corresponding object
             registry.bind("ZkService", stub);
-            System.out.println("ZkService is online.");
-        } catch (RemoteException e) {
-            System.out.println("Remote: " + e);
-        } catch (AlreadyBoundException e) {
-            System.out.println("Already Bound: " + e);
+            logger.warning("ZkService is online.");
         } catch (Exception e) {
             e.printStackTrace();
         }

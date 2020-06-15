@@ -4,6 +4,8 @@ import org.I0Itec.zkclient.ZkClient;
 import org.I0Itec.zkclient.serialize.SerializableSerializer;
 
 import java.text.SimpleDateFormat;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class Config {
 
@@ -12,6 +14,7 @@ public class Config {
     public final static String registryPath = "/serverRegistry";
     public final static String lockPath = "/lock";
     public final static String masterPath = "/master";
+    private final static String logConfigPath = "/logConfig";
 
     // Zookeeper cluster IP
     public final static String publicConnectString =
@@ -23,7 +26,10 @@ public class Config {
     public static boolean wal = true;
     public final static String logFilename = "kv.log";
 
+    // console log
     public final static SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
+    public static Logger logger = Logger.getLogger("global");
+
     public static ZkClient zkClient;
 
     public enum OpType
@@ -31,6 +37,33 @@ public class Config {
         READ,
         PUT,
         DELETE
+    }
+
+    public static void loggerLevelConfig(String level) {
+        Level logLevel;
+        if ("SEVERE".equals(level)) {
+            logLevel = Level.SEVERE;
+        } else if ("WARNING".equals(level)) {
+            logLevel = Level.WARNING;
+        } else if ("INFO".equals(level)) {
+            logLevel = Level.INFO;
+        } else if ("CONFIG".equals(level)) {
+            logLevel = Level.CONFIG;
+        } else if ("FINE".equals(level)) {
+            logLevel =  Level.FINE;
+        } else if ("FINER".equals(level)) {
+            logLevel =  Level.FINER;
+        } else if ("FINEST".equals(level)) {
+            logLevel =  Level.FINEST;
+        } else if ("ALL".equals(level)) {
+            logLevel =  Level.ALL;
+        } else if ("OFF".equals(level)) {
+            logLevel =  Level.OFF;
+        } else {
+            return;
+        }
+        zkClient.writeData(logConfigPath, logLevel);
+        logger.setLevel(logLevel);
     }
 
     /**
@@ -48,6 +81,12 @@ public class Config {
         if (!zkClient.exists(lockPath)) {
             zkClient.createPersistent(lockPath);
         }
+        // get logger level configuration
+        if (!zkClient.exists(logConfigPath)) {
+            zkClient.createPersistent(logConfigPath);
+            zkClient.writeData(logConfigPath, Level.INFO);
+        }
+        logger.setLevel(zkClient.readData(logConfigPath));
     }
 
     /**

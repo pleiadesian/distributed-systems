@@ -30,7 +30,7 @@ public class KVServiceImpl implements KVService {
             }
         }
         kv.put(key, value);
-        System.out.println(String.format("%s PUT %s=%s", df.format(new Date()), key, value));
+        logger.info(String.format("%s PUT %s=%s", df.format(new Date()), key, value));
         return 0;
     }
 
@@ -50,7 +50,7 @@ public class KVServiceImpl implements KVService {
             }
         }
         String value = kv.get(key);
-        System.out.println(String.format("%s READ %s=%s", df.format(new Date()), key, value));
+        logger.info(String.format("%s READ %s=%s", df.format(new Date()), key, value));
         return value;
     }
 
@@ -70,7 +70,7 @@ public class KVServiceImpl implements KVService {
             }
         }
         kv.remove(key);
-        System.out.println(String.format("%s DELETE %s", df.format(new Date()), key));
+        logger.info(String.format("%s DELETE %s", df.format(new Date()), key));
         return 0;
     }
 
@@ -79,7 +79,7 @@ public class KVServiceImpl implements KVService {
      * @return list of keys on this node
      */
     public List<String> getKeys() {
-        System.out.println(String.format("%s READ ALL KEYS", df.format(new Date())));
+        logger.info(String.format("%s READ ALL KEYS", df.format(new Date())));
         return new ArrayList<>(kv.keySet());
     }
 }

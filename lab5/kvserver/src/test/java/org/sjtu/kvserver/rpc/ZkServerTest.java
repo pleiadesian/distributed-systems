@@ -31,10 +31,6 @@ public class ZkServerTest {
             // generate a clientID
             clientId = UUID.randomUUID().toString();
             zk.login(clientId);
-        } catch (RemoteException e) {
-            System.out.println("Remote: " + e);
-        } catch (NotBoundException e) {
-            System.out.println("Not Bound: " + e);
         } catch (Exception e) {
             e.printStackTrace();
         }

@@ -32,14 +32,7 @@ public class ClusterClient {
         try {
             String masterIp = ((ServerInfo) zkClient.readData(masterPath)).getIp();
             Registry registry = LocateRegistry.getRegistry(masterIp, 1099);
-            ZkService zk = (ZkService) registry.lookup("ZkService");
-            return zk;
-        } catch (RemoteException e) {
-            System.out.println("Remote: " + e);
-            return null;
-        } catch (NotBoundException e) {
-            System.out.println("Not Bound: " + e);
-            return null;
+            return (ZkService) registry.lookup("ZkService");
         } catch (Exception e) {
             e.printStackTrace();
             return null;
