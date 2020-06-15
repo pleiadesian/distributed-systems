@@ -254,7 +254,7 @@ public class ClusterClient {
             @Override
             public void run() {
                 SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
-                ReentrantReadWriteLock rwl = null;
+                ReentrantReadWriteLock rwl;
                 String clientId = UUID.randomUUID().toString();
                 while (true) {
                     ZkService zk = connectMaster();
@@ -329,10 +329,94 @@ public class ClusterClient {
             }
         };
 
+        // READ all keys and assert
+        Thread th4 = new Thread() {
+            @Override
+            public void run() {
+                SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
+                ReentrantReadWriteLock rwl;
+                String clientId = UUID.randomUUID().toString();
+                while (true) {
+                    ZkService zk = connectMaster();
+                    if (zk == null) {
+                        continue;
+                    }
+                    try {
+                        if (kvs.isEmpty()) {
+                            sleep(1000);
+                            continue;
+                        }
+
+                        // log in of the kv cluster
+                        zk.login(clientId);
+
+                        kvsRwl.readLock().lock();
+                        String[] keys;
+                        try {
+                            keys = kvs.keySet().toArray(new String[0]);
+                        } catch (Exception e) {
+                            kvsRwl.readLock().unlock();
+                            throw e;
+                        }
+                        int total = keys.length;
+                        int inconsist = 0;
+                        for (String key : keys) {
+                            // connect to data node
+                            String nodeIp = zk.getNode(key, clientId);
+                            Registry nodeRegistry = LocateRegistry.getRegistry(nodeIp, 1099);
+                            KVService kv = (KVService) nodeRegistry.lookup("KVService");
+
+                            // READ and assert
+                            String remoteValue = kv.read(key);
+                            String localValue = kvs.get(key);
+
+                            try {
+                                if (remoteValue != null && localValue == null) {
+                                    throw (new Exception(String.format("expected <%s, NULL>, get <%s, %s>",
+                                            key, key, remoteValue)));
+                                } else if (remoteValue == null && localValue != null) {
+                                    throw (new Exception(String.format("expected <%s, %s>, get <%s, NULL>",
+                                            key, localValue, key)));
+                                } else if (remoteValue != null && localValue != null && !remoteValue.equals(localValue)) {
+                                    throw (new Exception(String.format("expected <%s, %s>, get <%s, %s>",
+                                            key, localValue, key, remoteValue)));
+                                }
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                                inconsist++;
+                            }
+                        }
+                        kvsRwl.readLock().unlock();
+                        if (inconsist > 0) {
+                            throw (new Exception(String.format("%d in %d (%.2f%%) key-value is inconsistent", inconsist,
+                                    total, (float)inconsist / total * 100)));
+                        }
+
+                        // log out of the kv cluster
+                        zk.logout(clientId);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                        // log out of the kv cluster
+                        try {
+                            zk.logout(clientId);
+                        } catch (RemoteException re) {
+                            e.printStackTrace();
+                        }
+                    }
+                    try {
+                        sleep(1000);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        };
+
         th0.start();
         th1.start();
         th2.start();
         th3.start();
+        th4.start();
 
         while (true) {
             try {
