@@ -1,5 +1,6 @@
 package org.sjtu.kvserver.config;
 
+import org.I0Itec.zkclient.IZkDataListener;
 import org.I0Itec.zkclient.ZkClient;
 import org.I0Itec.zkclient.serialize.SerializableSerializer;
 
@@ -71,6 +72,7 @@ public class Config {
      */
     public static void connect() {
         zkClient = new ZkClient(connectString, 5000, 5000, new SerializableSerializer());
+
         // init root node in zookeeper
         if (!zkClient.exists(clusterPath)) {
             zkClient.createPersistent(clusterPath);
@@ -81,12 +83,24 @@ public class Config {
         if (!zkClient.exists(lockPath)) {
             zkClient.createPersistent(lockPath);
         }
+
         // get logger level configuration
         if (!zkClient.exists(logConfigPath)) {
             zkClient.createPersistent(logConfigPath);
             zkClient.writeData(logConfigPath, Level.INFO);
         }
         logger.setLevel(zkClient.readData(logConfigPath));
+        zkClient.subscribeDataChanges(logConfigPath, new IZkDataListener() {
+            @Override
+            public void handleDataChange(String s, Object o) throws Exception {
+                logger.setLevel((Level) o);
+            }
+
+            @Override
+            public void handleDataDeleted(String s) throws Exception {
+
+            }
+        });
     }
 
     /**
