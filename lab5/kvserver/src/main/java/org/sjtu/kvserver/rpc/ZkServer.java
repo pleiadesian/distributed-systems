@@ -20,6 +20,11 @@ public class ZkServer {
 
     private static ServerInfo serverInfo;
 
+    /**
+     * Complete for master
+     * @param path znode for master election
+     * @return if master is taken by this node
+     */
     private static boolean takeMaster(String path) {
         try {
             zkClient.createEphemeral(path);
@@ -38,11 +43,15 @@ public class ZkServer {
             serverInfo = new ServerInfo(ip, "", "", 0);
             System.setProperty("java.rmi.server.hostname", ip);
 
+            // connect to zookeeper cluster
             connect();
+
+            // refresh zookeeper state if kv cluster restarts
             if ("init".equals(args[1])) {
                 refresh();
             }
 
+            // Zookeeper watcher thread
             ZkWatcher zkWatcher = new ZkWatcher();
             Thread zkThread = new Thread(zkWatcher);
 

@@ -1,11 +1,8 @@
 package org.sjtu.kvserver.service.impl;
 
-import org.sjtu.kvserver.config.Config;
 import org.sjtu.kvserver.service.KVService;
 
 import java.io.IOException;
-import java.rmi.RemoteException;
-import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -16,7 +13,14 @@ public class KVServiceImpl implements KVService {
 
     private static Map<String, String> kv = new ConcurrentHashMap<>();
 
-    public int put(String key, String value) throws RemoteException {
+    /**
+     * PUT
+     * @param key key to PUT
+     * @param value value of the key
+     * @return 0 when succeeded, -1 when failed
+     */
+    public int put(String key, String value) {
+        // write-after-log
         if (wal) {
             try {
                 log(OpType.PUT, key, value);
@@ -30,7 +34,13 @@ public class KVServiceImpl implements KVService {
         return 0;
     }
 
-    public String read(String key) throws RemoteException {
+    /**
+     * READ
+     * @param key key to READ
+     * @return value when succeeded, null when failed
+     */
+    public String read(String key) {
+        // write-after-log
         if (wal) {
             try {
                 log(OpType.READ, key, null);
@@ -44,7 +54,13 @@ public class KVServiceImpl implements KVService {
         return value;
     }
 
-    public int delete(String key) throws RemoteException {
+    /**
+     * DELETE
+     * @param key key to DELETE
+     * @return 0 when succeeded, -1 when failed
+     */
+    public int delete(String key) {
+        // write-after-log
         if (wal) {
             try {
                 log(OpType.DELETE, key, null);
@@ -58,7 +74,11 @@ public class KVServiceImpl implements KVService {
         return 0;
     }
 
-    public List<String> getKeys() throws RemoteException {
+    /**
+     * get all keys when migrating data from nodes to nodes
+     * @return list of keys on this node
+     */
+    public List<String> getKeys() {
         System.out.println(String.format("%s READ ALL KEYS", df.format(new Date())));
         return new ArrayList<>(kv.keySet());
     }

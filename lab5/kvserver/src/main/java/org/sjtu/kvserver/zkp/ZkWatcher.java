@@ -2,8 +2,6 @@ package org.sjtu.kvserver.zkp;
 
 import org.I0Itec.zkclient.IZkChildListener;
 import org.I0Itec.zkclient.IZkDataListener;
-import org.I0Itec.zkclient.ZkClient;
-import org.I0Itec.zkclient.serialize.SerializableSerializer;
 import org.sjtu.kvserver.dht.ConsistentHashing;
 import org.sjtu.kvserver.entity.NodeInfo;
 import org.sjtu.kvserver.entity.ServerInfo;
@@ -12,26 +10,38 @@ import org.sjtu.kvserver.service.KVService;
 
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import static java.lang.Thread.sleep;
 import static org.sjtu.kvserver.config.Config.*;
 
+/**
+ * Thread on the master node to monitor Zookeeper events
+ */
 public class ZkWatcher implements Runnable {
 
-    private static List<String> childs;
+    // consistent hashing for data partition
     public static ConsistentHashing ch = new ConsistentHashing();
+
+    // local copy of all register node on the Zookeeper
+    private static List<String> childs;
+
+    // read-write lock on the whole kv cluster
     private static ZkpDistributedReadWriteLock zkrwl = new ZkpDistributedReadWriteLock();
 
+    // TODO: lock and test this part
+    /**
+     * Monitor off-line events of data nodes
+     * @param child znode of child to be subscribe
+     */
     private static void subscribeOffline(String child) {
         zkClient.subscribeDataChanges(String.format("%s/%s", registryPath, child), new IZkDataListener() {
             @Override
             public void handleDataChange(String s, Object o) throws Exception {
-                // todo: lock and test this part
                 if (((NodeInfo) o).isOffline()) {
+                    // lock the kv cluster
                     zkrwl.lockWrite();
+
                     childs.remove(child);
                     ch.removePhysicalNode(child);
                     System.out.println("Delete " + child);
@@ -50,6 +60,8 @@ public class ZkWatcher implements Runnable {
 
                     zkClient.delete(String.format("%s/%s", registryPath, child));
                     System.out.println("migration finished");
+
+                    // unlock the kv cluster
                     zkrwl.unlockWrite();
                 }
             }
@@ -82,7 +94,9 @@ public class ZkWatcher implements Runnable {
 
     @Override
     public void run() {
+        // lock the kv cluster
         zkrwl.lockWrite();
+
         childs = zkClient.getChildren(registryPath);
 
         // monitor if a new child is added
@@ -92,7 +106,9 @@ public class ZkWatcher implements Runnable {
                 // register a new kv node
                 for (String child : childList) {
                     if (!childs.contains(child)) {
+                        // lock the kv cluster
                         zkrwl.lockWrite();
+
                         ch.addPhysicalNode(child);
                         System.out.println("Add " + child);
 
@@ -120,6 +136,8 @@ public class ZkWatcher implements Runnable {
 
                         childs.add(child);
                         subscribeOffline(child);
+
+                        // unlock the kv cluster
                         zkrwl.unlockWrite();
                     }
                 }
@@ -132,6 +150,7 @@ public class ZkWatcher implements Runnable {
             subscribeOffline(child);
         }
 
+        // unlock the kv cluster
         zkrwl.unlockWrite();
 
         while (true) {

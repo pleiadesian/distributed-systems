@@ -5,7 +5,7 @@ import java.rmi.RemoteException;
 
 public interface ZkService extends Remote {
 
-    String getNode(String key) throws RemoteException;
+    String getNode(String key, String clientId) throws RemoteException;
 
     void login(String clientId) throws RemoteException;
 

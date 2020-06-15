@@ -1,36 +1,33 @@
 package org.sjtu.kvserver.rpc;
 
 import org.I0Itec.zkclient.IZkDataListener;
-import org.I0Itec.zkclient.ZkClient;
 import org.I0Itec.zkclient.exception.ZkNodeExistsException;
-import org.I0Itec.zkclient.serialize.SerializableSerializer;
-import org.sjtu.kvserver.config.Config;
 import org.sjtu.kvserver.entity.ServerInfo;
 import org.sjtu.kvserver.service.KVService;
 import org.sjtu.kvserver.service.impl.KVServiceImpl;
 
-import java.io.IOException;
-import java.net.InetAddress;
-import java.net.NetworkInterface;
-import java.net.UnknownHostException;
 import java.rmi.AlreadyBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
-import java.rmi.server.RMISocketFactory;
 import java.rmi.server.UnicastRemoteObject;
-import java.util.Enumeration;
 
 import static org.sjtu.kvserver.config.Config.*;
 import static org.sjtu.kvserver.log.LogManager.redo;
 
 public class KVServer {
 
-    public static ServerInfo serverInfo;
-    private static Thread followTh;
+    private static ServerInfo serverInfo;
     private static ServerInfo masterInfo;
 
-    public static void takeMaster(String path) {
+    // Thread for slave to sync from master
+    private static Thread followTh;
+
+    /**
+     * Complete for master
+     * @param path znode for master election
+     */
+    private static void takeMaster(String path) {
         try {
             zkClient.createEphemeral(path);
             zkClient.writeData(path, serverInfo);
@@ -115,6 +112,7 @@ public class KVServer {
                 }
             });
 
+            // Register this data node
             String registerPath = String.format("%s/%s", registryPath, nodeId);
             try {
                 zkClient.createPersistent(registerPath);

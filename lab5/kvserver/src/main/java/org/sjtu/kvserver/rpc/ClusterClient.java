@@ -12,16 +12,22 @@ import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.text.SimpleDateFormat;
 import java.util.*;
-import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import static org.sjtu.kvserver.config.Config.masterPath;
 import static org.sjtu.kvserver.config.Config.publicConnectString;
 
+/**
+ * Run concurrent clients to test the kv cluster
+ */
 public class ClusterClient {
 
     private static ZkClient zkClient = new ZkClient(publicConnectString, 5000, 5000, new SerializableSerializer());
 
+    /**
+     * Find the master node
+     * @return service on the master node
+     */
     private static ZkService connectMaster() {
         try {
             String masterIp = ((ServerInfo) zkClient.readData(masterPath)).getIp();
@@ -41,7 +47,10 @@ public class ClusterClient {
     }
 
     public static void main(String[] args) {
+        // local copy of kv state for asserting
         Map<String, String> kvs = new HashMap<>();
+
+        // synchronize local updates with updates on the kv cluster
         Map<String, ReentrantReadWriteLock> rwlMap = new HashMap<>();
         ReentrantReadWriteLock kvsRwl = new ReentrantReadWriteLock();
 
@@ -65,7 +74,7 @@ public class ClusterClient {
                         zk.login(clientId);
 
                         // get node ID
-                        String nodeIp = zk.getNode(key);
+                        String nodeIp = zk.getNode(key, clientId);
                         Registry nodeRegistry = LocateRegistry.getRegistry(nodeIp, 1099);
 
                         // PUT
@@ -140,7 +149,7 @@ public class ClusterClient {
                         zk.login(clientId);
 
                         // get node ID
-                        String nodeIp = zk.getNode(key);
+                        String nodeIp = zk.getNode(key, clientId);
                         Registry nodeRegistry = LocateRegistry.getRegistry(nodeIp, 1099);
 
                         // PUT
@@ -210,7 +219,7 @@ public class ClusterClient {
                         zk.login(clientId);
 
                         // get node ID
-                        String nodeIp = zk.getNode(key);
+                        String nodeIp = zk.getNode(key, clientId);
                         Registry nodeRegistry = LocateRegistry.getRegistry(nodeIp, 1099);
                         KVService kv = (KVService) nodeRegistry.lookup("KVService");
 
@@ -281,7 +290,7 @@ public class ClusterClient {
                         zk.login(clientId);
 
                         // get node ID
-                        String nodeIp = zk.getNode(key);
+                        String nodeIp = zk.getNode(key, clientId);
                         Registry nodeRegistry = LocateRegistry.getRegistry(nodeIp, 1099);
 
                         // READ and assert
