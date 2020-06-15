@@ -3,10 +3,22 @@ package org.sjtu.kvserver.log;
 import org.sjtu.kvserver.service.KVService;
 
 import java.io.*;
+import java.util.zip.CRC32;
 
 import static org.sjtu.kvserver.config.Config.*;
 
 public class LogManager {
+
+    /**
+     * Calculate CRC32 for value
+     * @param value value
+     * @return CRC32
+     */
+    public static String getCRC32(String value) {
+        CRC32 crc32 = new CRC32();
+        crc32.update(value.getBytes());
+        return String.valueOf(crc32.getValue());
+    }
 
     /**
      * Log a kv request processed by the kv service
@@ -22,12 +34,15 @@ public class LogManager {
             logFile.createNewFile();
         }
 
-        String logLine;
+        String record;
         if (op == OpType.PUT) {
-            logLine = op + " " + key + " " + value;
+            record = op + " " + key + " " + value;
         } else {
-            logLine = op + " " + key;
+            record = op + " " + key;
         }
+
+        String crc = getCRC32(record);
+        String logLine = crc + " " + record;
 
         Writer logWriter = new FileWriter(logFile,true);
         logWriter.write(logLine + "\n");
@@ -54,15 +69,22 @@ public class LogManager {
 
             String logLine;
             while((logLine = bufferedReader.readLine()) != null) {
-                String[] buf = logLine.split(" ");
+                // crc check, discard this record when failed
+                String[] buf = logLine.split(" ", 2);
+                String crc = buf[0];
+                String record = buf[1];
+                if (!getCRC32(record).equals(crc)) {
+                    continue;
+                }
 
                 // READ operations have no effect on the state of the kv service, do nothing with them
-                if ("PUT".equals(buf[0])) {
-                    String key = buf[1];
-                    String value = buf[2];
+                String[] recordBuf = record.split(" ");
+                if ("PUT".equals(recordBuf[0])) {
+                    String key = recordBuf[1];
+                    String value = recordBuf[2];
                     localKv.put(key, value);
-                } else if ("DELETE".equals(buf[1])) {
-                    String key = buf[1];
+                } else if ("DELETE".equals(recordBuf[0])) {
+                    String key = recordBuf[1];
                     localKv.delete(key);
                 }
             }
