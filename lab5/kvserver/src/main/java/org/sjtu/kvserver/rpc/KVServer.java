@@ -140,8 +140,6 @@ public class KVServer {
 
                 @Override
                 public void handleDataDeleted(String s) throws Exception {
-                    zkClient.delete(registerPath);
-                    disconnect();
                     logger.warning(String.format("%s on %s quits", serverInfo.getIp(), serverInfo.getNodeId()));
                     System.exit(0);
                 }

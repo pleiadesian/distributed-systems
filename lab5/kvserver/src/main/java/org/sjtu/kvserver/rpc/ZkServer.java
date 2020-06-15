@@ -29,7 +29,7 @@ public class ZkServer {
         try {
             zkClient.createEphemeral(path);
             zkClient.writeData(path, serverInfo);
-            logger.warning(String.format("%s on %s takes master", serverInfo.getIp(), serverInfo.getNodeId()));
+            logger.warning(String.format("%s takes master", serverInfo.getIp()));
             return true;
         } catch (ZkNodeExistsException e) {
             return false;

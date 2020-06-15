@@ -131,6 +131,7 @@ public class Config {
      * Disconnect to Zookeeper when going off-line
      */
     public static void disconnect() {
+        zkClient.unsubscribeAll();
         zkClient.close();
     }
 }

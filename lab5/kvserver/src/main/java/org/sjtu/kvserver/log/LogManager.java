@@ -74,6 +74,7 @@ public class LogManager {
                 String crc = buf[0];
                 String record = buf[1];
                 if (!getCRC32(record).equals(crc)) {
+                    logger.severe(String.format("detect log record corruption: %s", record));
                     continue;
                 }
 

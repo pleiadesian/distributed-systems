@@ -80,13 +80,15 @@ public class ZkWatcher implements Runnable {
 
             @Override
             public void handleDataDeleted(String s) throws Exception {
-                logger.warning(String.format("%s crashes, lock the cluster", s));
-                zkrwl.lockWrite();
-                while (!zkClient.exists(String.format("%s/%s", clusterPath, child))) {
-                    sleep(100);
+                if (zkClient.exists(String.format("%s/%s", registryPath, child))) {
+                    logger.warning(String.format("%s crashes, lock the cluster", s));
+                    zkrwl.lockWrite();
+                    while (!zkClient.exists(String.format("%s/%s", clusterPath, child))) {
+                        sleep(100);
+                    }
+                    zkrwl.unlockWrite();
+                    logger.warning(String.format("%s recovered, unlock the cluster", s));
                 }
-                zkrwl.unlockWrite();
-                logger.warning(String.format("%s recovered, unlock the cluster", s));
             }
         });
     }
@@ -158,7 +160,6 @@ public class ZkWatcher implements Runnable {
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
-            System.err.println("master running");
         }
     }
 }

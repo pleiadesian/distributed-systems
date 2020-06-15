@@ -1,7 +1,9 @@
 package org.sjtu.kvserver.entity;
 
-public class NodeInfo {
-    private boolean offline = false;
+import java.io.Serializable;
+
+public class NodeInfo implements Serializable {
+    private boolean offline;
 
     public boolean isOffline() {
         return offline;

@@ -186,6 +186,11 @@ public class ClusterClient {
                 SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
                 String clientId = UUID.randomUUID().toString();
                 while (true) {
+                    try {
+                        sleep(500);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
                     ZkService zk = connectMaster();
                     if (zk == null) {
                         continue;
@@ -337,6 +342,11 @@ public class ClusterClient {
                 ReentrantReadWriteLock rwl;
                 String clientId = UUID.randomUUID().toString();
                 while (true) {
+                    try {
+                        sleep(10000);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
                     ZkService zk = connectMaster();
                     if (zk == null) {
                         continue;
@@ -361,14 +371,20 @@ public class ClusterClient {
                         int total = keys.length;
                         int inconsist = 0;
                         for (String key : keys) {
-                            // connect to data node
-                            String nodeIp = zk.getNode(key, clientId);
-                            Registry nodeRegistry = LocateRegistry.getRegistry(nodeIp, 1099);
-                            KVService kv = (KVService) nodeRegistry.lookup("KVService");
+                            String remoteValue, localValue;
+                            try {
+                                // connect to data node
+                                String nodeIp = zk.getNode(key, clientId);
+                                Registry nodeRegistry = LocateRegistry.getRegistry(nodeIp, 1099);
+                                KVService kv = (KVService) nodeRegistry.lookup("KVService");
 
-                            // READ and assert
-                            String remoteValue = kv.read(key);
-                            String localValue = kvs.get(key);
+                                // READ and assert
+                                remoteValue = kv.read(key);
+                                localValue = kvs.get(key);
+                            } catch (Exception e) {
+                                kvsRwl.readLock().unlock();
+                                throw e;
+                            }
 
                             try {
                                 if (remoteValue != null && localValue == null) {
@@ -392,6 +408,8 @@ public class ClusterClient {
                                     total, (float)inconsist / total * 100)));
                         }
 
+                        System.out.println("READ and assert all keys");
+
                         // log out of the kv cluster
                         zk.logout(clientId);
                     } catch (Exception e) {
@@ -402,11 +420,6 @@ public class ClusterClient {
                         } catch (RemoteException re) {
                             e.printStackTrace();
                         }
-                    }
-                    try {
-                        sleep(1000);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
                     }
                 }
             }
