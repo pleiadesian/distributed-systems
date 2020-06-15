@@ -131,15 +131,6 @@ public class Config {
      * Disconnect to Zookeeper when going off-line
      */
     public static void disconnect() {
-        if (zkClient.exists(clusterPath)) {
-            zkClient.deleteRecursive(clusterPath);
-        }
-        if (zkClient.exists(registryPath)) {
-            zkClient.deleteRecursive(registryPath);
-        }
-        if (zkClient.exists(lockPath)) {
-            zkClient.deleteRecursive(lockPath);
-        }
         zkClient.close();
     }
 }

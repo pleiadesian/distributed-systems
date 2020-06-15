@@ -29,7 +29,6 @@ public class ZkWatcher implements Runnable {
     // read-write lock on the whole kv cluster
     private static ZkpDistributedReadWriteLock zkrwl = new ZkpDistributedReadWriteLock();
 
-    // TODO: lock and test this part
     /**
      * Monitor off-line events of data nodes
      * @param child znode of child to be subscribe

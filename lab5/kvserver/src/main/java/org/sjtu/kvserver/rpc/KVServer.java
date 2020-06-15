@@ -2,6 +2,7 @@ package org.sjtu.kvserver.rpc;
 
 import org.I0Itec.zkclient.IZkDataListener;
 import org.I0Itec.zkclient.exception.ZkNodeExistsException;
+import org.sjtu.kvserver.entity.NodeInfo;
 import org.sjtu.kvserver.entity.ServerInfo;
 import org.sjtu.kvserver.service.KVService;
 import org.sjtu.kvserver.service.impl.KVServiceImpl;
@@ -11,7 +12,9 @@ import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
+import java.util.List;
 
+import static java.lang.Thread.sleep;
 import static org.sjtu.kvserver.config.Config.*;
 import static org.sjtu.kvserver.log.LogManager.redo;
 
@@ -44,13 +47,18 @@ public class KVServer {
                         KVService fromKv = (KVService) fromRegistry.lookup("KVService");
                         Registry toRegistry = LocateRegistry.getRegistry("localhost", 1099);
                         KVService toKv = (KVService) toRegistry.lookup("KVService");
-                        // TODO: migrating by sequentially read master's log
                         while (!this.isInterrupted()) {
-                            for (String key : fromKv.getKeys()) {
+                            List<String> fromKeys = fromKv.getKeys();
+                            for (String key : fromKeys) {
                                 String value = fromKv.read(key);
                                 if (value != null) {
                                     toKv.put(key, value);
                                 }
+                            }
+                            List<String> toKeys = toKv.getKeys();
+                            toKeys.removeAll(fromKeys);
+                            for (String key : toKeys) {
+                                toKv.delete(key);
                             }
                             logger.warning(String.format("slave on %s syncs from master", masterInfo.getNodeId()));
                             sleep(500);
@@ -113,15 +121,15 @@ public class KVServer {
             });
 
             // Register this data node
+            NodeInfo nodeInfo = new NodeInfo(false);
             String registerPath = String.format("%s/%s", registryPath, nodeId);
             try {
                 zkClient.createPersistent(registerPath);
+                zkClient.writeData(registerPath, nodeInfo);
                 logger.warning(String.format("register %s", nodeId));
             } catch (ZkNodeExistsException e) {
                 logger.warning(String.format("%s has registered", nodeId));
             }
-
-            // todo: simulate off-line workload
 
             // wait for master to commit off-line
             zkClient.subscribeDataChanges(registerPath, new IZkDataListener() {
@@ -132,10 +140,20 @@ public class KVServer {
 
                 @Override
                 public void handleDataDeleted(String s) throws Exception {
+                    zkClient.delete(registerPath);
+                    disconnect();
                     logger.warning(String.format("%s on %s quits", serverInfo.getIp(), serverInfo.getNodeId()));
                     System.exit(0);
                 }
             });
+
+            // go off-line after some time
+            if (args.length > 2) {
+                int sleepInterval = Integer.valueOf(args[2]) * 1000;
+                sleep(sleepInterval);
+                nodeInfo.setOffline(true);
+                zkClient.writeData(registerPath, nodeInfo);
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }
