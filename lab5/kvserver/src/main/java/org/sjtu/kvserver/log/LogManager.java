@@ -17,7 +17,10 @@ public class LogManager {
     private static ReentrantLock logLock = new ReentrantLock();
 
     // log sequence number
-    private static int logSeqNum = 0;
+    private static int logSeqNum = 1;
+
+    // write sequence number
+    private static int writeSeqNum = 1;
 
     public static int getLogSeqNum() {
         return logSeqNum;
@@ -25,6 +28,14 @@ public class LogManager {
 
     public static void setLogSeqNum(int logSeqNum) {
         LogManager.logSeqNum = logSeqNum;
+    }
+
+    public static int getWriteSeqNum() {
+        return writeSeqNum;
+    }
+
+    public static void setWriteSeqNum(int writeSeqNum) {
+        LogManager.writeSeqNum = writeSeqNum;
     }
 
     /**
@@ -86,7 +97,6 @@ public class LogManager {
             logWriter.write(logLine + "\n");
             logWriter.flush();
             logWriter.close();
-            logSeqNum++;
             return seqNum;
         } else {
             // log on master

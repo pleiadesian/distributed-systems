@@ -13,8 +13,9 @@ import java.rmi.registry.Registry;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static java.lang.Thread.sleep;
 import static org.sjtu.kvserver.config.Config.*;
-import static org.sjtu.kvserver.log.LogManager.log;
+import static org.sjtu.kvserver.log.LogManager.*;
 
 public class KVServiceImpl implements KVService {
 
@@ -59,10 +60,15 @@ public class KVServiceImpl implements KVService {
                 int seqNum = log(OpType.PUT, key, value, 0);
                 // retry to sync until all slaves commit
                 while (syncToSlave(OpType.PUT, seqNum, key, value) < 0);
+                // write sequence should be consistency with log sequence
+                while (getWriteSeqNum() < seqNum);
             }
 
             // if crashed here, inconsistency exists between master and slave
             kv.put(key, value);
+            if (wal) {
+                setWriteSeqNum(getWriteSeqNum() + 1);
+            }
             logger.info(String.format("%s PUT %s=%s", df.format(new Date()), key, value));
             return 0;
         } catch (Exception e) {
@@ -77,6 +83,16 @@ public class KVServiceImpl implements KVService {
      * @return value when succeeded, null when failed
      */
     public String read(String key) {
+        if (wal) {
+            int seqNum = getLogSeqNum();
+            while (getWriteSeqNum() < seqNum) {
+                try {
+                    sleep(100);
+                }catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        }
         String value = kv.get(key);
         logger.info(String.format("%s READ %s=%s", df.format(new Date()), key, value));
         return value;
@@ -94,10 +110,15 @@ public class KVServiceImpl implements KVService {
                 int seqNum = log(OpType.DELETE, key, null, 0);
                 // retry to sync until all slaves commit
                 while (syncToSlave(OpType.DELETE, seqNum, key, null) < 0);
+                // write sequence should be consistency with log sequence
+                while (getWriteSeqNum() < seqNum);
             }
 
             // if crashed here, inconsistency exists between master and slave
             kv.remove(key);
+            if (wal) {
+                setWriteSeqNum(getWriteSeqNum() + 1);
+            }
             logger.info(String.format("%s DELETE %s", df.format(new Date()), key));
             return 0;
         } catch (Exception e) {
@@ -123,6 +144,7 @@ public class KVServiceImpl implements KVService {
             } else if (op == OpType.DELETE) {
                 kv.remove(key);
             }
+            setLogSeqNum(getLogSeqNum() + 1);
             return 0;
         } catch (Exception e) {
             e.printStackTrace();

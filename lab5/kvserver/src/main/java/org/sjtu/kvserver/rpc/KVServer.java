@@ -17,8 +17,7 @@ import java.util.List;
 
 import static java.lang.Thread.sleep;
 import static org.sjtu.kvserver.config.Config.*;
-import static org.sjtu.kvserver.log.LogManager.redo;
-import static org.sjtu.kvserver.log.LogManager.setLogSeqNum;
+import static org.sjtu.kvserver.log.LogManager.*;
 
 public class KVServer {
 
@@ -56,11 +55,14 @@ public class KVServer {
         try {
             zkClient.createEphemeral(path);
             zkClient.writeData(path, serverInfo);
+            setWriteSeqNum(getLogSeqNum());
             logger.warning(String.format("%s on %s takes master", serverInfo.getIp(), serverInfo.getNodeId()));
             return true;
         } catch (ZkNodeExistsException e) {
             // follow existing master
             zkrwl.lockWrite();
+            // do not log when copying from master
+            wal = false;
             masterInfo = zkClient.readData(path);
             String masterIp = masterInfo.getIp();
             try {
@@ -72,6 +74,8 @@ public class KVServer {
                 for (String key : fromKeys) {
                     String value = fromKv.read(key);
                     if (value != null) {
+                        // simple log
+                        log(OpType.PUT, key, value, 0);
                         toKv.put(key, value);
                     }
                 }
@@ -80,42 +84,9 @@ public class KVServer {
             } catch (Exception e0) {
                 e0.printStackTrace();
             }
+            wal = true;
             zkrwl.unlockWrite();
             return false;
-
-            // follow new master
-//            masterInfo = zkClient.readData(path);
-//            followTh = new Thread() {
-//                @Override
-//                public void run() {
-//                    try {
-//                        String masterIp = masterInfo.getIp();
-//                        Registry fromRegistry = LocateRegistry.getRegistry(masterIp, 1099);
-//                        KVService fromKv = (KVService) fromRegistry.lookup("KVService");
-//                        Registry toRegistry = LocateRegistry.getRegistry("localhost", 1099);
-//                        KVService toKv = (KVService) toRegistry.lookup("KVService");
-//                        while (!this.isInterrupted()) {
-//                            List<String> fromKeys = fromKv.getKeys();
-//                            for (String key : fromKeys) {
-//                                String value = fromKv.read(key);
-//                                if (value != null) {
-//                                    toKv.put(key, value);
-//                                }
-//                            }
-//                            List<String> toKeys = toKv.getKeys();
-//                            toKeys.removeAll(fromKeys);
-//                            for (String key : toKeys) {
-//                                toKv.delete(key);
-//                            }
-//                            logger.warning(String.format("slave on %s syncs from master", masterInfo.getNodeId()));
-//                            sleep(500);
-//                        }
-//                    } catch (Exception e) {
-//                        e.printStackTrace();
-//                    }
-//                }
-//            };
-//            followTh.start();
         }
     }
 
@@ -155,12 +126,6 @@ public class KVServer {
                 @Override
                 public void handleDataDeleted(String s) throws Exception {
                     logger.warning(String.format("master %s on %s crashes", masterInfo.getIp(), masterInfo.getNodeId()));
-
-                    // stop syncing from master
-//                    if (followTh != null) {
-//                        followTh.interrupt();
-//                        followTh.join();
-//                    }
 
                     // compete for master
                     takeMaster(path);
