@@ -22,7 +22,7 @@ public class KVServerTest {
     public void setUp() throws Exception {
         try{
             // get register from localhost:1099(host:port)
-            Registry registry = LocateRegistry.getRegistry("47.100.165.67", 1099);
+            Registry registry = LocateRegistry.getRegistry("139.224.114.108", 1099);
             // get remote object by name
             kv = (KVService) registry.lookup("KVService");
         } catch (Exception e) {

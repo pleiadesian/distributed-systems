@@ -41,7 +41,7 @@ public class ZkServiceImpl implements ZkService {
     public void login(String clientId) throws RemoteException {
         if (zkrwls.get(clientId) != null) {
             logger.warning(String.format("%s %s has logged in", df.format(new Date()), clientId));
-            throw(new RemoteException());
+            throw new RemoteException();
         }
         ZkpDistributedReadWriteLock zkrwl = new ZkpDistributedReadWriteLock();
         zkrwl.lockRead();

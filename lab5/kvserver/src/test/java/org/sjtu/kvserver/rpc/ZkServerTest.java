@@ -25,7 +25,7 @@ public class ZkServerTest {
     public void setUp() throws Exception {
         try{
             // get register from localhost:1099(host:port)
-            Registry registry = LocateRegistry.getRegistry("139.196.33.196", 1099);
+            Registry registry = LocateRegistry.getRegistry("101.132.122.146", 1099);
             // get remote object by name
             zk = (ZkService) registry.lookup("ZkService");
             // generate a clientID
@@ -44,14 +44,14 @@ public class ZkServerTest {
             for (int object = 0; object <= 999; ++object) {
                 String nodeIp = zk.getNode(Integer.toString(object), clientId);
                 Integer count = objectNodeMap.get(nodeIp);
-                objectNodeMap.put(nodeIp, (count == null ? 0 : count + 1));
+                objectNodeMap.put(nodeIp, (count == null ? 1 : count + 1));
             }
 
             // dump distribution
             double totalCount = 1000;
             for (Map.Entry<String, Integer> entry : objectNodeMap.entrySet()) {
-                long percent = (int) (100 * entry.getValue() / totalCount);
-                System.out.println("IP=" + entry.getKey() + ": RATE=" + percent + "%");
+                double percent = (100 * entry.getValue() / totalCount);
+                System.out.println(String.format("IP=%s: RATE=%.3f%%", entry.getKey(), percent));
             }
         } catch (RemoteException e) {
             e.printStackTrace();

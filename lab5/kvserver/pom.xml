@@ -27,7 +27,7 @@
                     <archive>
                         <manifest>
                             <addClasspath>true</addClasspath>
-                            <mainClass>org.sjtu.kvserver.rpc.ZkServer</mainClass>
+                            <mainClass>org.sjtu.kvserver.rpc.KVServer</mainClass>
                         </manifest>
                     </archive>
                 </configuration>

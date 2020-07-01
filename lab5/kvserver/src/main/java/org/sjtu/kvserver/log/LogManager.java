@@ -3,18 +3,36 @@ package org.sjtu.kvserver.log;
 import org.sjtu.kvserver.service.KVService;
 
 import java.io.*;
+import java.util.Date;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.zip.CRC32;
 
+import static java.lang.Thread.sleep;
 import static org.sjtu.kvserver.config.Config.*;
 
 public class LogManager {
+
+    // protect concurrent log operation
+    private static ReentrantLock logLock = new ReentrantLock();
+
+    // log sequence number
+    private static int logSeqNum = 0;
+
+    public static int getLogSeqNum() {
+        return logSeqNum;
+    }
+
+    public static void setLogSeqNum(int logSeqNum) {
+        LogManager.logSeqNum = logSeqNum;
+    }
 
     /**
      * Calculate CRC32 for value
      * @param value value
      * @return CRC32
      */
-    public static String getCRC32(String value) {
+    private static String getCRC32(String value) {
         CRC32 crc32 = new CRC32();
         crc32.update(value.getBytes());
         return String.valueOf(crc32.getValue());
@@ -27,7 +45,7 @@ public class LogManager {
      * @param value value of the key
      * @throws IOException exception may occur when creating log file or write a new log
      */
-    public static void log(OpType op, String key, String value) throws IOException {
+    public static int log(OpType op, String key, String value, int seqNum) throws IOException {
         File logFile = new File(logFilename);
 
         if(!logFile.exists()) {
@@ -44,10 +62,44 @@ public class LogManager {
         String crc = getCRC32(record);
         String logLine = crc + " " + record;
 
-        Writer logWriter = new FileWriter(logFile,true);
-        logWriter.write(logLine + "\n");
-        logWriter.flush();
-        logWriter.close();
+        if (seqNum > 0) {
+            // log on slave, discard duplicated sync operation
+            if (seqNum < logSeqNum) {
+                return seqNum;
+            }
+            // simple ticket lock implementation, wait until all previous operations to be done
+            int retry = 0;
+            while (seqNum != logSeqNum) {
+                try {
+                    sleep(100);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                retry++;
+                // timeout, master is down, do not wait
+                if (retry > 30) {
+                    throw new IOException();
+                }
+            }
+            logger.info(String.format("%s commit seqnum=%d", df.format(new Date()), seqNum));
+            Writer logWriter = new FileWriter(logFile, true);
+            logWriter.write(logLine + "\n");
+            logWriter.flush();
+            logWriter.close();
+            logSeqNum++;
+            return seqNum;
+        } else {
+            // log on master
+            logLock.lock();
+            int currSeqNum = logSeqNum;
+            logSeqNum++;
+            Writer logWriter = new FileWriter(logFile, true);
+            logWriter.write(logLine + "\n");
+            logWriter.flush();
+            logWriter.close();
+            logLock.unlock();
+            return currSeqNum;
+        }
     }
 
     /**

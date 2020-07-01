@@ -81,7 +81,7 @@ public class ClusterClient {
                         rwl.writeLock().lock();
                         try {
                             if (kv.put(key, value) < 0) {
-                                throw(new Exception("PUT failed"));
+                                throw new Exception("PUT failed");
                             }
                         } catch (Exception e) {
                             rwl.writeLock().unlock();
@@ -152,7 +152,7 @@ public class ClusterClient {
                         rwl.writeLock().lock();
                         try {
                             if (kv.put(key, value) < 0) {
-                                throw(new Exception("PUT failed"));
+                                throw new Exception("PUT failed");
                             }
                         } catch (Exception e) {
                             rwl.writeLock().unlock();
@@ -227,7 +227,7 @@ public class ClusterClient {
                         rwl.writeLock().lock();
                         try {
                             if (kv.delete(key) < 0) {
-                                throw(new Exception("DELETE failed"));
+                                throw new Exception("DELETE failed");
                             }
                         } catch (Exception e) {
                             rwl.writeLock().unlock();
@@ -305,16 +305,16 @@ public class ClusterClient {
                         String localValue = kvs.get(key);
                         if (remoteValue != null && localValue == null) {
                             rwl.readLock().unlock();
-                            throw(new Exception(String.format("expected <%s, NULL>, get <%s, %s>",
-                                    key, key, remoteValue)));
+                            throw new Exception(String.format("expected <%s, NULL>, get <%s, %s>",
+                                    key, key, remoteValue));
                         } else if (remoteValue == null && localValue != null) {
                             rwl.readLock().unlock();
-                            throw(new Exception(String.format("expected <%s, %s>, get <%s, NULL>",
-                                    key, localValue, key)));
+                            throw new Exception(String.format("expected <%s, %s>, get <%s, NULL>",
+                                    key, localValue, key));
                         } else if (remoteValue != null && localValue != null && !remoteValue.equals(localValue)) {
                             rwl.readLock().unlock();
-                            throw(new Exception(String.format("expected <%s, %s>, get <%s, %s>",
-                                    key, localValue, key, remoteValue)));
+                            throw new Exception(String.format("expected <%s, %s>, get <%s, %s>",
+                                    key, localValue, key, remoteValue));
                         }
                         rwl.readLock().unlock();
                         System.out.println(String.format("%s READ %s=%s on %s", df.format(new Date()), key, remoteValue, nodeIp));
@@ -388,14 +388,14 @@ public class ClusterClient {
 
                             try {
                                 if (remoteValue != null && localValue == null) {
-                                    throw (new Exception(String.format("expected <%s, NULL>, get <%s, %s>",
-                                            key, key, remoteValue)));
+                                    throw new Exception(String.format("expected <%s, NULL>, get <%s, %s>",
+                                            key, key, remoteValue));
                                 } else if (remoteValue == null && localValue != null) {
-                                    throw (new Exception(String.format("expected <%s, %s>, get <%s, NULL>",
-                                            key, localValue, key)));
+                                    throw new Exception(String.format("expected <%s, %s>, get <%s, NULL>",
+                                            key, localValue, key));
                                 } else if (remoteValue != null && localValue != null && !remoteValue.equals(localValue)) {
-                                    throw (new Exception(String.format("expected <%s, %s>, get <%s, %s>",
-                                            key, localValue, key, remoteValue)));
+                                    throw new Exception(String.format("expected <%s, %s>, get <%s, %s>",
+                                            key, localValue, key, remoteValue));
                                 }
                             } catch (Exception e) {
                                 e.printStackTrace();
@@ -404,8 +404,8 @@ public class ClusterClient {
                         }
                         kvsRwl.readLock().unlock();
                         if (inconsist > 0) {
-                            throw (new Exception(String.format("%d in %d (%.2f%%) key-value is inconsistent", inconsist,
-                                    total, (float)inconsist / total * 100)));
+                            throw new Exception(String.format("%d in %d (%.2f%%) key-value is inconsistent", inconsist,
+                                    total, (float)inconsist / total * 100));
                         }
 
                         System.out.println("READ and assert all keys");
