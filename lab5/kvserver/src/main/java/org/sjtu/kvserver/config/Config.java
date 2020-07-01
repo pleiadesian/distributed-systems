@@ -23,7 +23,7 @@ public class Config {
     private final static String connectString =
             "172.19.44.153:2181,172.19.44.155:2181,172.19.44.158:2181,172.19.44.154:2181,172.19.44.156:2181";
 
-    // write-after-log
+    // write ahead log
     public static boolean wal = true;
     public final static String logFilename = "kv.log";
 

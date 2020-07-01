@@ -54,7 +54,7 @@ public class KVServiceImpl implements KVService {
      */
     public int put(String key, String value) {
         try {
-            // write-after-log
+            // write ahead log
             if (wal) {
                 int seqNum = log(OpType.PUT, key, value, 0);
                 // retry to sync until all slaves commit
@@ -89,7 +89,7 @@ public class KVServiceImpl implements KVService {
      */
     public int delete(String key) {
         try {
-            // write-after-log
+            // write ahead log
             if (wal) {
                 int seqNum = log(OpType.DELETE, key, null, 0);
                 // retry to sync until all slaves commit
