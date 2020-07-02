@@ -54,10 +54,11 @@ public class ZkWatcher implements Runnable {
                         String targetIP = ((ServerInfo) zkClient.readData(String.format("%s/%s", clusterPath, ch.getObjectNode(key)))).getIp();
                         Registry toRegistry = LocateRegistry.getRegistry(targetIP, 1099);
                         KVService toKv = (KVService) toRegistry.lookup("KVService");
-                        toKv.put(key, fromKv.read(key));
+                        String value = fromKv.read(key);
+                        toKv.put(key, value);
                     }
 
-                    zkClient.delete(String.format("%s/%s", registryPath, child));
+                    zkClient.deleteRecursive(String.format("%s/%s", registryPath, child));
                     logger.warning("migration finished");
 
                     // unlock the kv cluster
